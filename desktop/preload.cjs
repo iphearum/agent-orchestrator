@@ -1,0 +1,31 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("workbench", {
+  platform: process.platform,
+  minimizeWindow: () => ipcRenderer.send("window:minimize"),
+  toggleMaximizeWindow: () => ipcRenderer.send("window:toggle-maximize"),
+  closeWindow: () => ipcRenderer.send("window:close"),
+  openWorkspace: () => ipcRenderer.invoke("workspace:open"),
+  currentWorkspace: () => ipcRenderer.invoke("workspace:current"),
+  listFiles: path => ipcRenderer.invoke("workspace:list", path),
+  searchWorkspace: (query, options) => ipcRenderer.invoke("workspace:search", query, options),
+  readFile: path => ipcRenderer.invoke("workspace:read", path),
+  readImage: path => ipcRenderer.invoke("workspace:read-image", path),
+  writeFile: (path, content) => ipcRenderer.invoke("workspace:write", path, content),
+  listAgents: () => ipcRenderer.invoke("agents:list"),
+  saveAgent: agent => ipcRenderer.invoke("agents:save", agent),
+  deleteAgent: agentId => ipcRenderer.invoke("agents:delete", agentId),
+  getSettings: () => ipcRenderer.invoke("settings:get"),
+  saveSettings: settings => ipcRenderer.invoke("settings:save", settings),
+  setApprovalMode: mode => ipcRenderer.invoke("settings:approval-mode", mode),
+  listConversations: () => ipcRenderer.invoke("conversations:list"),
+  getConversation: id => ipcRenderer.invoke("conversations:get", id),
+  runTask: request => ipcRenderer.invoke("chat:run", request),
+  startTerminal: (id, dimensions) => ipcRenderer.invoke("terminal:start", { id, ...dimensions }),
+  terminalInput: (id, data) => ipcRenderer.send("terminal:input", { id, data }),
+  resizeTerminal: (id, dimensions) => ipcRenderer.send("terminal:resize", { id, ...dimensions }),
+  closeTerminal: id => ipcRenderer.invoke("terminal:close", id),
+  onAgentEvent: callback => { const listener = (_event, data) => callback(data); ipcRenderer.on("agent:event", listener); return () => ipcRenderer.removeListener("agent:event", listener); },
+  onTerminalData: callback => { const listener = (_event, payload) => callback(payload); ipcRenderer.on("terminal:data", listener); return () => ipcRenderer.removeListener("terminal:data", listener); },
+  onTerminalExit: callback => { const listener = (_event, payload) => callback(payload); ipcRenderer.on("terminal:exit", listener); return () => ipcRenderer.removeListener("terminal:exit", listener); }
+});

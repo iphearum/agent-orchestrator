@@ -1,0 +1,30 @@
+{
+  "appId": "local.agentworkbench",
+  "productName": "Agent Workbench",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "desktop/main.mjs",
+    "desktop/preload.cjs",
+    "desktop/renderer/dist/**/*",
+    "dist/**/*"
+  ],
+  "extraMetadata": {
+    "main": "desktop/main.mjs"
+  },
+  "asar": true,
+  "npmRebuild": false,
+  "asarUnpack": [
+    "node_modules/node-pty/**"
+  ],
+  "win": {
+    "target": "nsis"
+  },
+  "mac": {
+    "target": "dmg"
+  },
+  "linux": {
+    "target": "AppImage"
+  }
+}

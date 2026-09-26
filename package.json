@@ -1,0 +1,154 @@
+{
+  "name": "agent-orchestrator",
+  "displayName": "Agent Orchestrator",
+  "description": "Multi-agent orchestration for VS Code with SQLite memory and dynamic delegation.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "extensionKind": ["workspace"],
+  "categories": ["Other", "AI", "Chat", "Programming Languages", "Machine Learning"],
+  "activationEvents": [
+    "onCommand:agentOrchestrator.open",
+    "onCommand:agentOrchestrator.runTask",
+    "onChatParticipant:agentOrchestrator.chat"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "postinstall": "node scripts/patch-node-pty.cjs",
+    "package": "vsce package",
+    "desktop:dev": "concurrently -k \"vite --config desktop/renderer/vite.config.mjs\" \"wait-on http://127.0.0.1:5173 && npm run compile && electron desktop/main.mjs\"",
+    "desktop:build": "npm run compile && vite build --config desktop/renderer/vite.config.mjs",
+    "desktop:start": "npm run desktop:build && electron desktop/main.mjs",
+    "desktop:dist": "npm run desktop:build && electron-builder --config desktop/electron-builder.json"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "monaco-editor": "^0.52.2",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.104.0",
+    "@vscode/vsce": "^3.6.0",
+    "concurrently": "^9.2.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.0",
+    "wait-on": "^8.0.4"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentOrchestrator.open",
+        "title": "Agent Orchestrator: Open"
+      },
+      {
+        "command": "agentOrchestrator.runTask",
+        "title": "Agent Orchestrator: Run Task"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "agentOrchestrator.chat",
+        "name": "orchestrator",
+        "fullName": "Agent Orchestrator",
+        "description": "Coordinate specialized agents to solve a task.",
+        "isSticky": true
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentOrchestrator",
+          "title": "Agents",
+          "icon": "media/agents.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentOrchestrator": [
+        {
+          "id": "agentOrchestrator.agents",
+          "name": "Agents"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Agent Orchestrator",
+      "properties": {
+        "agentOrchestrator.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:11434/v1",
+          "description": "OpenAI-compatible API base URL."
+        },
+        "agentOrchestrator.apiKey": {
+          "type": "string",
+          "default": "local",
+          "description": "API key for the OpenAI-compatible endpoint."
+        },
+        "agentOrchestrator.model": {
+          "type": "string",
+          "default": "qwen3:8b",
+          "description": "Default model name."
+        },
+        "agentOrchestrator.providers": {
+          "type": "array",
+          "default": [],
+          "description": "Named model providers. Each entry has id, name, baseUrl, apiKey, models, model, and optional protocol (openai or anthropic)."
+        },
+        "agentOrchestrator.activeProviderId": {
+          "type": "string",
+          "default": "",
+          "description": "Provider id to use when providers are configured."
+        },
+        "agentOrchestrator.activeModel": {
+          "type": "string",
+          "default": "",
+          "description": "Model to use on the active provider."
+        },
+        "agentOrchestrator.maxDelegationDepth": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 8
+        },
+        "agentOrchestrator.maxDelegationsPerTask": {
+          "type": "number",
+          "default": 8,
+          "minimum": 1,
+          "maximum": 50
+        },
+        "agentOrchestrator.layaEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable shared per-agent decision policies."
+        },
+        "agentOrchestrator.contextRecentMessages": {
+          "type": "number",
+          "default": 6,
+          "minimum": 1,
+          "maximum": 30,
+          "description": "Maximum recent messages included in compact agent context."
+        },
+        "agentOrchestrator.automaticExecutionConfidence": {
+          "type": "number",
+          "default": 0.9,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "agentOrchestrator.contextEnrichmentConfidence": {
+          "type": "number",
+          "default": 0.65,
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}
