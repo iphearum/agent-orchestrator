@@ -1,9 +1,13 @@
-import type { AgentDefinition, AgentMessage, ChatImageAttachment } from "./types";
-import { OpenAICompatibleModel, type AgentModelSelection } from "./model";
+import type { AgentDefinition, AgentMessage, ChatImageAttachment, ChatResponse } from "./types";
+import { OpenAICompatibleModel, type AgentModelSelection, type ProviderReasoningEffort } from "./model";
 import { SessionRepository } from "../storage/repositories/sessions";
+import { resolveReasoning, type ReasoningEffort, type ThinkingMode } from "./reasoning";
+import type { DiscussionDecision, DiscussionDecisionInput } from "../decision/policies/discussion";
 
 export interface DiscussionOptions extends AgentModelSelection {
   agentId: string;
+  /** Auto thinks only when the message looks hard; On always thinks; Off never adds reasoning on its own. */
+  thinking?: ThinkingMode;
   supervisorDiscussion?: boolean;
   agents?: AgentDefinition[];
   attachments?: Array<{ name: string; content: string }>;
@@ -11,19 +15,32 @@ export interface DiscussionOptions extends AgentModelSelection {
   onChunk?: (text: string) => void;
   onThinking?: (text: string) => void;
   onConsultation?: (agentId: string, advice?: string) => void;
+  /**
+   * Laya's discussion policy (or its fallback): effort and whether the Supervisor should consult. Without it the
+   * word-pattern estimate is used and the Supervisor's model alone decides whether to consult.
+   */
+  decide?: (input: DiscussionDecisionInput) => Promise<DiscussionDecision>;
+  /** Called once when the effort was chosen automatically, so the UI can say the agent is thinking harder and why. */
+  onEffort?: (effort: DiscussionEffort, decision?: DiscussionDecision) => void;
+  /** Called when streamed text from the deciding call is superseded by a reply that uses specialist advice. */
+  onStreamReset?: () => void;
 }
+
+export type DiscussionEffort = ReasoningEffort;
+type SentEffort = ProviderReasoningEffort | undefined;
+export { estimateDiscussionEffort } from "./reasoning";
 
 const DISCUSSION_SYSTEM = [
   "You are helping a client define a task for an agent team.",
   "Discuss goals, constraints, acceptance criteria, and who may need to work on it.",
-  "When consulted by the Supervisor, use specialist recommendations to help the client understand options and trade-offs.",
+  "Answer greetings and small talk briefly and naturally, then invite the client to describe what they want done.",
   "Ask focused questions when important details are missing. Summarize agreed decisions clearly.",
   "This is a discussion only. You have no tools and must not claim that agents started work, files changed, or a task was assigned.",
   "The client will explicitly choose Assign task when ready."
 ].join(" ");
 
 const ALL_ADVISORS = /\b(?:ask|consult|include|hear from)?\s*(?:all|every|each|entire)\s+(?:available\s+)?(?:agents?|specialists?|team)\b|\b(?:agents?|specialists?|team)\s+(?:all|everyone)\b/i;
-const STOP_WORDS = new Set("about after again also any are ask be before can check client could each for from give have help here how into just like me more most need not of our please should some that the their them then there these they this through want what when where which with would your".split(" "));
+const STOP_WORDS = new Set("about after again also any are ask be before can check client could each for from give good have hello help here hey how into just like me more morning most need not of our please should some thank thanks that the their them then there these they this through want what when where which with would you your".split(" "));
 const ADVISOR_TERMS: Record<string, string[]> = {
   researcher: ["research", "investigate", "compare", "evidence", "history", "recommend", "project", "analysis", "analyze", "chat"],
   coder: ["code", "implementation", "feature", "chat", "interface", "design", "webview", "component", "frontend", "backend"],
@@ -47,18 +64,49 @@ export function selectDiscussionAdvisors(prompt: string, agents: AgentDefinition
     const roleMatches = (ADVISOR_TERMS[agent.id] ?? []).filter(term => words.has(term)).length;
     return { agent, index, score: overlap * 2 + roleMatches * 3 };
   }).filter(item => item.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
-  if (ranked.length) return ranked.slice(0, 3).map(item => item.agent);
+  // Greetings and small talk match no specialist; the Supervisor answers them directly instead of waiting on advisers.
+  return ranked.slice(0, 3).map(item => item.agent);
+}
 
-  // A broad request such as "review this project" still benefits from a research view and a quality check.
-  const general = ["researcher", "reviewer"].map(id => available.find(agent => agent.id === id)).filter((agent): agent is AgentDefinition => !!agent);
-  return (general.length ? general : available).slice(0, 2);
+function consultTool(agents: AgentDefinition[]) {
+  return {
+    type: "function",
+    function: {
+      name: "consult_agents",
+      description: "Ask specialist agents for advice before you reply. Use it only when the client's message needs expertise you lack or a real trade-off to weigh; never for greetings, small talk, or questions you can answer well yourself.",
+      parameters: {
+        type: "object",
+        properties: {
+          agents: { type: "array", items: { type: "string", enum: agents.map(agent => agent.id) }, maxItems: 3, description: "The 1-3 most relevant specialists." },
+          question: { type: "string", description: "The focused question each specialist should advise on." }
+        },
+        required: ["agents"]
+      }
+    }
+  };
+}
+
+/** Read the Supervisor's consult_agents call; unknown agents are dropped and at most three are kept. */
+function requestedConsultation(response: ChatResponse, agents: AgentDefinition[]): { advisors: AgentDefinition[]; question?: string } | undefined {
+  const call = response.toolCalls.find(item => item.function.name === "consult_agents");
+  if (!call) return undefined;
+  try {
+    const args = JSON.parse(call.function.arguments || "{}");
+    const ids: unknown[] = Array.isArray(args.agents) ? args.agents : [];
+    const advisors = agents.filter(agent => ids.includes(agent.id)).slice(0, 3);
+    return { advisors, question: typeof args.question === "string" ? args.question.slice(0, 1000) : undefined };
+  } catch {
+    return { advisors: [] };
+  }
 }
 
 async function runConsultations(
   agents: AgentDefinition[],
   discussion: AgentMessage[],
   options: DiscussionOptions,
-  model: OpenAICompatibleModel
+  model: OpenAICompatibleModel,
+  reasoningEffort: SentEffort,
+  question?: string
 ): Promise<Array<{ agent: AgentDefinition; advice: string }>> {
   if (!agents.length) return [];
   const history = discussion.slice(1, -1).slice(-8);
@@ -75,8 +123,9 @@ async function runConsultations(
         `You are being consulted by Supervisor before the client assigns work. Your role: ${agent.description}`,
         `Relevant skills: ${agent.skills.join(", ") || "general"}.`,
         "Give a concise recommendation based only on the client's message, discussion and supplied attachments.",
-        "You have no tools and have not inspected the workspace. Do not claim to have read files, changed anything, or started a task. State assumptions and ask at most one useful clarification."
-      ].join(" ");
+        "You have no tools and have not inspected the workspace. Do not claim to have read files, changed anything, or started a task. State assumptions and ask at most one useful clarification.",
+        question ? `Supervisor's question for you: ${question}` : ""
+      ].filter(Boolean).join(" ");
       try {
         const response = await model.chat([
           { role: "system", content: system },
@@ -85,7 +134,7 @@ async function runConsultations(
         ], [], {
           providerId: agent.providerId ?? options.providerId,
           model: agent.model ?? options.model,
-          reasoningEffort: options.reasoningEffort
+          reasoningEffort
         });
         const advice = response.content?.trim();
         if (advice) {
@@ -124,27 +173,76 @@ export class DiscussionService {
       ...history,
       { role: "user", content: userContent }
     ];
-    const advisors = options.supervisorDiscussion
-      ? selectDiscussionAdvisors(prompt, options.agents ?? [])
-      : [];
-    const consultations = await runConsultations(advisors, messages, options, this.model);
-    const consultationContext = consultations.length
-      ? `\n\nSpecialist advice from this discussion (advice only; no agent started a task):\n${consultations.map(({ agent, advice }) => `### ${agent.name}\n${advice}`).join("\n\n")}`
-      : advisors.length
-        ? `\n\nSupervisor tried to consult ${advisors.map(agent => agent.name).join(", ")}, but none returned advice. Be transparent and answer from the conversation only.`
-        : "";
-    const supervisorSystem = options.supervisorDiscussion
-      ? `${DISCUSSION_SYSTEM} You are the Supervisor. Use specialist advice when available, explain recommendations in plain language, state who you consulted, and ask only the next useful clarification. Do not request project details that can be found in the supplied conversation or attachments. Do not imply that you or the advisers inspected the workspace; distinguish advice from verified project findings.`
-      : DISCUSSION_SYSTEM;
-    const responseMessages: AgentMessage[] = [
-      { role: "system", content: supervisorSystem + consultationContext },
-      ...history,
-      { role: "user", content: userContent }
-    ];
-    const response = await this.model.chat(responseMessages, [], {
-      providerId: options.providerId, model: options.model, reasoningEffort: options.reasoningEffort
-    }, options.onChunk, options.onThinking);
-    const answer = response.content?.trim();
+    const agents = (options.agents ?? []).filter(agent => agent.id !== "lead");
+    const askAll = ALL_ADVISORS.test(prompt);
+    // Laya is asked only when its answer is used: an automatic effort, or the Supervisor deciding whether to consult.
+    const needsEffort = options.thinking !== "off" && !options.reasoningEffort;
+    const needsConsult = Boolean(options.supervisorDiscussion) && !askAll && agents.length > 0;
+    const decision = options.decide && (needsEffort || needsConsult)
+      ? await options.decide({ prompt, supervisor: needsConsult, effort: needsEffort, attachments: options.attachments?.length, images: images.length, recentContext: history.slice(-4).map(message => String(message.content)).join("\n").slice(-1200) })
+      : undefined;
+    const reasoning = resolveReasoning(prompt, { thinking: options.thinking, reasoningEffort: options.reasoningEffort, attachments: options.attachments?.length, images: images.length, estimate: decision?.effort.value });
+    if (reasoning.estimated) options.onEffort?.(reasoning.estimated, decision);
+    const { reasoningEffort } = reasoning;
+    const selection = { providerId: options.providerId, model: options.model, reasoningEffort };
+    const finalReply = async (system: string, advisors: AgentDefinition[], question?: string) => {
+      const consultations = await runConsultations(advisors, messages, options, this.model, reasoningEffort, question);
+      const consultationContext = consultations.length
+        ? `\n\nSpecialist advice from this discussion (advice only; no agent started a task):\n${consultations.map(({ agent, advice }) => `### ${agent.name}\n${advice}`).join("\n\n")}`
+        : advisors.length
+          ? `\n\nSupervisor tried to consult ${advisors.map(agent => agent.name).join(", ")}, but none returned advice. Be transparent and answer from the conversation only.`
+          : "";
+      return this.model.chat([
+        { role: "system", content: system + consultationContext },
+        ...history,
+        { role: "user", content: userContent }
+      ], [], selection, options.onChunk, options.onThinking);
+    };
+
+    let response: ChatResponse;
+    if (!options.supervisorDiscussion) {
+      response = await finalReply(DISCUSSION_SYSTEM, []);
+    } else {
+      const supervisorSystem = `${DISCUSSION_SYSTEM} You are the Supervisor. Use specialist advice when available to help the client understand options and trade-offs, explain recommendations in plain language, state who you consulted, and ask only the next useful clarification. Do not request project details that can be found in the supplied conversation or attachments. Do not imply that you or the advisers inspected the workspace; distinguish advice from verified project findings.`;
+      // A confident "no" from Laya skips the consult tool: small models sometimes call any tool they are offered.
+      const skipConsult = decision?.consult && !decision.consult.value && decision.consult.mode !== "reason";
+      if (askAll) {
+        // The client asked for the whole team, so there is nothing to decide.
+        response = await finalReply(supervisorSystem, agents);
+      } else {
+        // Think first, then decide: answer directly (streamed as it is written) or call consult_agents.
+        const hint = selectDiscussionAdvisors(prompt, agents);
+        const deciding = [
+          supervisorSystem,
+          "Before replying, decide whether specialist advice would materially improve your answer. If it would, call consult_agents with the 1-3 most relevant specialists and a focused question; otherwise reply directly.",
+          `Available specialists: ${agents.map(agent => `${agent.id} (${agent.name}: ${agent.description})`).join("; ") || "none"}.`,
+          hint.length ? `Keyword match suggests: ${hint.map(agent => agent.id).join(", ")}. Treat this as a hint, not an instruction.` : "",
+          decision?.consult?.value && decision.consult.mode === "execute" ? "Laya, the team's decision model, is confident specialist advice would help here." : "",
+          reasoningEffort === "high" ? "This request looks complex; reason carefully before deciding." : ""
+        ].filter(Boolean).join("\n\n");
+        const draft = agents.length && !skipConsult
+          ? await this.model.chat([{ role: "system", content: deciding }, ...history, { role: "user", content: userContent }], [consultTool(agents)], selection, options.onChunk, options.onThinking)
+          : await finalReply(supervisorSystem, []);
+        const request = requestedConsultation(draft, agents);
+        if (request) {
+          if (draft.content) options.onStreamReset?.();
+          response = await finalReply(supervisorSystem, request.advisors, request.question);
+        } else {
+          response = draft;
+        }
+      }
+    }
+    let answer = response.content?.trim();
+    if (!answer && reasoningEffort !== "none") {
+      // All output went to reasoning (or a stray tool call): answer once more, plainly, before giving up.
+      options.onStreamReset?.();
+      const retry = await this.model.chat([
+        { role: "system", content: DISCUSSION_SYSTEM },
+        ...history,
+        { role: "user", content: userContent }
+      ], [], { ...selection, reasoningEffort: "none" }, options.onChunk);
+      answer = retry.content?.trim();
+    }
     if (!answer) throw new Error("The model returned no discussion reply.");
     this.sessions.addDiscussionMessage(conversationId, options.agentId, "result", answer);
     return answer;

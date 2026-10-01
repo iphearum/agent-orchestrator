@@ -19,7 +19,25 @@ export interface ModelConfig {
   activeModel?: string;
 }
 
-export interface AgentModelSelection { providerId?: string; model?: string; reasoningEffort?: "low" | "medium" | "high"; }
+/** "none" asks a thinking model (e.g. Qwen on Ollama) to answer without reasoning. */
+export type ProviderReasoningEffort = "none" | "low" | "medium" | "high";
+export interface AgentModelSelection { providerId?: string; model?: string; reasoningEffort?: ProviderReasoningEffort; }
+
+/** Streamed reasoning longer than this, or repeating itself, is treated as a runaway loop. */
+export const MAX_THINKING_CHARS = 60_000;
+const REPEAT_PROBE_CHARS = 240;
+
+/** True when the latest stretch of reasoning already appeared twice before: small models can loop until the context is full. */
+export function isRunawayThinking(text: string): boolean {
+  if (text.length > MAX_THINKING_CHARS) return true;
+  if (text.length < REPEAT_PROBE_CHARS * 4) return false;
+  const probe = text.slice(-REPEAT_PROBE_CHARS);
+  let count = 0;
+  for (let at = text.indexOf(probe); at !== -1 && count < 3; at = text.indexOf(probe, at + 1)) count++;
+  return count >= 3;
+}
+
+class RunawayThinkingError extends Error {}
 
 export class OpenAICompatibleModel {
   constructor(private readonly config: () => ModelConfig | Promise<ModelConfig> = () => ({ baseUrl: "http://localhost:11434/v1", apiKey: "local", model: "qwen3:8b" })) {}
@@ -92,8 +110,10 @@ export class OpenAICompatibleModel {
       };
     }
 
+    const controller = new AbortController();
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${apiKey}`
@@ -103,26 +123,40 @@ export class OpenAICompatibleModel {
         messages,
         tools: tools.length ? tools : undefined,
         tool_choice: tools.length ? "auto" : undefined,
-        temperature: 0.2,
+        // Low temperature keeps plain answers focused, but makes thinking models repeat themselves; let reasoning use the provider default.
+        ...(!selected?.reasoningEffort || selected.reasoningEffort === "none" ? { temperature: 0.2 } : {}),
         ...(onChunk ? { stream: true } : {}),
         ...(selected?.reasoningEffort ? { reasoning_effort: selected.reasoningEffort } : {})
       })
     });
 
     if (!res.ok) {
-      throw new Error(`Model HTTP ${res.status}: ${await res.text()}`);
+      const body = await res.text();
+      // Some OpenAI-compatible models reject reasoning_effort; retry once with the provider's default reasoning.
+      if (res.status === 400 && selected?.reasoningEffort && /reasoning/i.test(body)) {
+        return this.chat(messages, tools, { ...selected, reasoningEffort: undefined }, onChunk, onThinking);
+      }
+      throw new Error(`Model HTTP ${res.status}: ${body}`);
     }
 
     if (onChunk && res.headers.get("content-type")?.includes("text/event-stream")) {
       let content = "";
       let thinkingText = "";
       const calls = new Map<number, { id: string; name: string; arguments: string }>();
-      await this.consumeSSE(res, data => {
+      let checkedAt = 0;
+      try {
+        await this.consumeSSE(res, data => {
         const delta = data.choices?.[0]?.delta;
         if (typeof delta?.content === "string" && delta.content) { content += delta.content; onChunk(delta.content); }
         // Ollama streams a thinking model's reasoning as "reasoning"; vLLM, llama.cpp and DeepSeek use "reasoning_content".
         const reasoning = [delta?.reasoning_content, delta?.reasoning, delta?.reasoning_summary, delta?.thinking_summary].find(value => typeof value === "string" && value);
-        if (reasoning) { thinkingText += reasoning; onThinking?.(reasoning); }
+        if (reasoning) {
+          thinkingText += reasoning; onThinking?.(reasoning);
+          if (!content && thinkingText.length - checkedAt >= 500) {
+            checkedAt = thinkingText.length;
+            if (isRunawayThinking(thinkingText)) throw new RunawayThinkingError();
+          }
+        }
         for (const call of delta?.tool_calls || []) {
           const current = calls.get(call.index) || { id: "", name: "", arguments: "" };
           if (call.id) current.id = call.id;
@@ -130,7 +164,15 @@ export class OpenAICompatibleModel {
           if (call.function?.arguments) current.arguments += call.function.arguments;
           calls.set(call.index, current);
         }
-      });
+        });
+      } catch (error) {
+        if (!(error instanceof RunawayThinkingError)) throw error;
+        // Abort so the provider stops generating, then answer once without reasoning.
+        controller.abort();
+        if (selected?.reasoningEffort === "none") throw new Error(`The model${model ? ` (${model})` : ""} kept reasoning in a loop and gave no answer. Try a larger model.`);
+        onThinking?.("\n\n_Reasoning was repeating itself, so it was stopped. Answering directly._");
+        return this.chat(messages, tools, { ...selected, reasoningEffort: "none" }, onChunk, onThinking);
+      }
       return { content: content || null, thinkingText: thinkingText || null, toolCalls: [...calls.values()].map(call => ({ id: call.id, type: "function" as const, function: { name: call.name, arguments: call.arguments || "{}" } })) };
     }
 

@@ -10,7 +10,16 @@ interface DesktopWorkbenchApi {
   workbenchRpc(method: string, params: unknown): Promise<unknown>;
   onWorkbenchChanged(listener: (change: { scopes: Array<"agents" | "tasks" | "health" | "conversations">; taskIds?: string[] }) => void): () => void;
 }
-interface Window { workbench?: DesktopWorkbenchApi }
+type RobotAnimationState = "idle" | "listening" | "thinking" | "working" | "talking" | "happy" | "error";
+interface Window {
+  workbench?: DesktopWorkbenchApi;
+  /** Procedural 3D robot (webview-ui/src/robot-runtime.ts), loaded as a separate script; absent without WebGL. */
+  AgentRobot3D?: {
+    getAvatarSprite(model?: "default" | "wanted"): Promise<string | undefined>;
+    getAvatarSheet(state: RobotAnimationState, model?: "default" | "wanted"): Promise<{ url: string; frames: number; duration: number } | undefined>;
+    mount(canvas: HTMLCanvasElement, model?: "default" | "wanted"): (() => void) | undefined;
+  };
+}
 
 declare module "markdown-it" {
   interface MarkdownItOptions { html?: boolean; linkify?: boolean; breaks?: boolean; typographer?: boolean }

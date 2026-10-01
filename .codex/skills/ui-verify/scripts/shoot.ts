@@ -1,6 +1,6 @@
 // Screenshots a page with headless Chrome/Edge, or dumps its script errors.
 //
-//   bun .claude/skills/ui-verify/scripts/shoot.ts <page.html | http://…> [--out name.png] [--size 1100x620]
+//   bun .codex/skills/ui-verify/scripts/shoot.ts <page.html | http://…> [--out name.png] [--size 1100x620]
 //        [--hash hover] [--widths 420,340,280] [--dump] [--wait 4000]
 //
 // Files land in .ui-check/ (inside the repo: the Windows bun used under WSL cannot write to WSL's /tmp).

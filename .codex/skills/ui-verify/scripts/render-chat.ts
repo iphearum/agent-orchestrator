@@ -1,7 +1,7 @@
 // Renders the chat webview (backend/src/vscode/chatWindow.ts) outside VS Code as static HTML pages.
 //
 //   bun run compile
-//   bun .claude/skills/ui-verify/scripts/render-chat.ts --feed conversation --themes light,dark [--agent devops]
+//   bun .codex/skills/ui-verify/scripts/render-chat.ts --feed conversation --themes light,dark [--agent devops]
 //
 // Writes .ui-check/chat-<feed>-<theme>.html. A feed is a script that posts the host messages the chat would get
 // (session, sessions, user, activity, result, toast …); see feeds/*.js. Open the pages with shoot.ts.

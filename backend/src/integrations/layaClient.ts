@@ -20,7 +20,7 @@ export interface LayaTeamPlanTask { id: string; agent_id: string; instruction: s
 export interface LayaTeamPlan { objective: string; tasks: LayaTeamPlanTask[]; }
 
 /** Laya's question primitives: `noul` is a yes/no probability, `choice` picks one criteria key. */
-type Question = { type: "noul"; instructions: string } | { type: "choice"; instructions: string; criteria: Record<string, string> };
+export type Question = { type: "noul"; instructions: string } | { type: "choice"; instructions: string; criteria: Record<string, string> };
 /**
  * Typed answers, e.g. from laya-multilingual:
  *   noul   {"type":"noul","noul":0.97}                                 → probability of "yes"
@@ -28,7 +28,7 @@ type Question = { type: "noul"; instructions: string } | { type: "choice"; instr
  *   score  {"type":"score","score":1.9,"confidence":0.7,"legend":{…},"probabilities":{…}}
  * Older Jev-compatible services answer yes/no questions as a choice of "yes"/"no" with a probability.
  */
-type Answer = { type?: unknown; choice?: unknown; noul?: unknown; score?: unknown; confidence?: unknown; probability?: unknown; probabilities?: unknown };
+export type Answer = { type?: unknown; choice?: unknown; noul?: unknown; score?: unknown; confidence?: unknown; probability?: unknown; probabilities?: unknown };
 export interface LayaClientConfig {
   endpoint: string;
   apiKey?: string;
@@ -138,6 +138,7 @@ export class LayaHttpClient {
   private keepAliveUnsupported = false;
   /** How long the last answered request took, so a timeout can say how far off the limit is. */
   private lastLatencyMs?: number;
+  private warming = false;
 
   constructor(private readonly config: () => LayaClientConfig | Promise<LayaClientConfig>) {}
 
@@ -158,6 +159,25 @@ export class LayaHttpClient {
 
   /** `force` bypasses the back-off; `minTimeoutMs` lets explicit checks wait out Laya's cold start. */
   async decide(state: AgentState, policy: DecisionPolicy, agents: Array<{ id: string; name: string; description: string; skills: string[] }>, force = false, minTimeoutMs = 0): Promise<LayaDecisionResult> {
+    const data = await this.send(state, policy, this.questions(state, policy, agents), { force, minTimeoutMs });
+    return this.mapAnswers(data.answers, data.routing, state, policy);
+  }
+
+  /**
+   * Ask a policy's own questions and return the raw answers. Used where the client is waiting (a chat reply), so a
+   * cold model is skipped instead of waiting out its load: the caller falls back and a background warm-up starts.
+   */
+  async ask(state: AgentState, questions: Record<string, Question>): Promise<Record<string, Answer>> {
+    const keepAlive = (await this.config()).keepAlive?.trim();
+    if (!this.pausedAt && this.isCold(this.keepAliveUnsupported ? undefined : keepAlive)) {
+      if (!this.warming) { this.warming = true; void this.warmUp().finally(() => { this.warming = false; }); }
+      throw new Error("Laya is loading its model; using the fallback for this reply.");
+    }
+    return (await this.send(state, "general", questions, { force: false, minTimeoutMs: 0 })).answers;
+  }
+
+  private async send(state: AgentState, policy: DecisionPolicy, questions: Record<string, Question>, options: { force: boolean; minTimeoutMs: number }): Promise<{ answers: Record<string, Answer>; routing?: unknown }> {
+    const { force, minTimeoutMs } = options;
     const loaded = await this.config();
     const cfg = { ...loaded, endpoint: loaded.endpoint.trim() };
     // New endpoint, model or key: whatever failed before may work now, so resume.
@@ -175,7 +195,6 @@ export class LayaHttpClient {
       this.lastError = "Laya endpoints must use HTTPS (HTTP is allowed for localhost).";
       throw new Error(this.lastError);
     }
-    const questions = this.questions(state, policy, agents);
     const model = cfg.model?.trim();
     const keepAlive = cfg.keepAlive?.trim();
     const requestState = model && /(?:^|\/)laya(?:[-/]|$)/i.test(model)
@@ -214,7 +233,7 @@ export class LayaHttpClient {
       this.mayBeCold = false;
       this.lastSuccessAt = new Date().toISOString();
       this.lastLatencyMs = Date.now() - startedAt;
-      return this.mapAnswers(data.answers, data.routing, state, policy);
+      return { answers: data.answers, routing: data.routing };
     } catch (error) {
       const aborted = controller.signal.aborted;
       this.lastError = aborted

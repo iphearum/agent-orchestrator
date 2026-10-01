@@ -32,7 +32,7 @@
   "scripts": {
     "compile": "tsc -p . && bun run build:webview",
     "watch": "tsc -watch -p .",
-    "build:webview": "bun build webview-ui/src/main.tsx --target=browser --format=esm --production --entry-naming [name].[ext] --asset-naming [name].[ext] --outdir dist/webview",
+    "build:webview": "bun build webview-ui/src/main.tsx --target=browser --format=esm --production --entry-naming [name].[ext] --asset-naming [name].[ext] --outdir dist/webview && bun build webview-ui/src/robot-runtime.ts --target=browser --format=iife --production --minify --outfile dist/webview/robot-runtime.js",
     "watch:webview": "bun run build:webview --watch",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p webview-ui",
     "test": "bun test ./backend/src ./webview-ui/src",

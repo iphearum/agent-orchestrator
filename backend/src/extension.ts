@@ -19,6 +19,8 @@ import { runWorkspaceCommand } from "./tools/shellTools";
 import { showExternalTools, VsCodeToolHost } from "./vscode/lmTools";
 import { CliAgentTransport, type CliAgentLink } from "./integrations/cliAgentTransport";
 import { DiscussionService, assignmentInstruction } from "./core/discussion";
+import { resolveReasoning } from "./core/reasoning";
+import { decideDiscussion } from "./decision/policies/discussion";
 
 export async function activate(context: vscode.ExtensionContext) {
   const storageDir = context.globalStorageUri.fsPath;
@@ -201,6 +203,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const chatView = new ChatWindowProvider(queue, (instruction, agentId, selection: ChatComposerSelection, progress, conversationId, mode, intent) => {
     if (intent === "discuss") return discussion.reply(conversationId, instruction, {
       agentId,
+      thinking: selection.thinking,
       supervisorDiscussion: mode === "agent" && agentId === "lead",
       agents: db.listAgents(),
       providerId: selection.providerId,
@@ -210,12 +213,21 @@ export async function activate(context: vscode.ExtensionContext) {
       images: selection.images,
       onChunk: text => progress(text, { type: "chunk", agentId, text }),
       onThinking: text => progress(text, { type: "thinking_chunk", agentId, text }),
+      decide: input => {
+        const cfg = vscode.workspace.getConfiguration("agentOrchestrator");
+        const enabled = cfg.get<boolean>("layaEnabled", true) && cfg.get<string>("layaEndpoint", "").trim();
+        return decideDiscussion(enabled ? laya : undefined, input, { automatic: cfg.get<number>("automaticExecutionConfidence", .9), enrichment: cfg.get<number>("contextEnrichmentConfidence", .65) });
+      },
+      onEffort: (effort, decision) => progress(`${db.getAgent(agentId)?.name ?? "Agent"} is thinking it through (${effort} effort, ${decision?.source === "laya" ? `Laya ${Math.round(decision.effort.confidence * 100)}%` : `estimated${decision?.fallbackReason ? `: ${decision.fallbackReason}` : ""}`})…`),
+      onStreamReset: () => progress("", { type: "stream_reset", agentId, text: "" }),
       onConsultation: (advisorId, advice) => advice
         ? progress(advice, { type: "thinking_message", agentId: advisorId, text: advice })
         : progress(`Supervisor is consulting ${db.getAgent(advisorId)?.name ?? advisorId}…`)
     });
     const assignedPrompt = assignmentInstruction(instruction, sessions.messages(conversationId, 12).map(({ role, text }) => ({ role, text })));
     const fileContext = selection.attachments.map(file => `\n\n--- Attached file: ${file.name} ---\n${file.content}`).join("");
+    const reasoning = resolveReasoning(instruction, { thinking: selection.thinking, reasoningEffort: selection.reasoningEffort, attachments: selection.attachments.length, images: selection.images.length });
+    if (reasoning.estimated) progress(`Thinking it through (${reasoning.estimated} effort)…`);
     return runPrompt(assignedPrompt + fileContext, (message, event) => progress(message, event), agentId, mode === "team", {
       conversationId,
       displayPrompt: instruction,
@@ -223,8 +235,8 @@ export async function activate(context: vscode.ExtensionContext) {
       attachedImageNames: selection.images.map(image => image.name),
       approvalMode: selection.approvalMode,
       planMode: selection.planMode,
-      thinking: selection.thinking,
-      reasoningEffort: selection.reasoningEffort,
+      thinking: reasoning.thinking,
+      reasoningEffort: reasoning.reasoningEffort,
       providerId: selection.providerId,
       model: selection.model
     });

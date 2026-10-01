@@ -1,5 +1,63 @@
 # Progress
 
+2026-10-01 18:39 +07 [wanted-robot] Checked the wanted model against the clay turnaround target/vally/1-5.png: head depth 2.25→2.55 (near-sphere), raised rim round the visor, bigger centred ear pucks, round torso cross-section, both arms reach forward, antenna set back and leaning back. Added canvas.dataset.robotView (front/right/left/back/top) for the wanted hero to compare views. Front overlay still aligned; avatar ok; typecheck ok; default preview errors none.
+
+2026-10-01 18:31 +07 [wanted-robot] Re-measured target/wanted-robot.png on a grid overlay and rebuilt from the user's parts sheet: head 2.62x2.31 turned toward viewer-left + 6° roll (was turned the wrong way), smaller egg torso 1.78x2.1 with grey neck connector + torso socket, shoulder caps with grey sockets, segmented arms with visible grey elbow/wrist rings, mitten hands (thumb + 3 fingers), domed antenna collar with metal stem, disc ears with inset plate, navy visor with blue rim reflection. Overlay aligns; avatar ok; typecheck ok; default preview errors none.
+
+2026-10-01 18:24 +07 [wanted-robot] Rebuilt the wanted model to match target/wanted-robot.png: deeper round helmet, curved indigo glass visor with glowing cyan oval eyes and pink smile, disc ears, grey neck, egg torso, smooth capsule arms (waving palm pivots at the elbow, relaxed resting hand). Shared drawFace no longer carries a wanted branch. Side-by-side compare and avatar at 96/48/24 px checked; typecheck ok; bundle 2.10 MB (+3 KB, capsule builder).
+
+2026-10-01 18:13 +07 [team-intent] Team assign after any discussion always requested a Laya team plan (wrapped discussion >400 chars → mayNeedTeam). Now judged on the client's own request (displayPrompt); questions never request a team; "carry out what we agreed" still uses the discussion. Tests 136 pass.
+
+2026-10-01 18:11 +07 [wanted-robot] Added an opt-in procedural wanted-style model with pearl shell, oval torso/head, navy visor, cyan eyes, pink smile, white antenna and greeting hand. Existing no-argument robot calls retain the default model. SwiftShader preview and avatar render errors none.
+
+2026-10-01 18:10 +07 [modes-e2e] Real Ollama (qwen3.5:0.8b) Team+Supervisor matrix, 11 scenarios (discuss greeting/hard/ask-all, assign question/fresh/delegate): all complete, no empty/unfinished answers, no writes; delegation ask→database+reviewer combined in both modes. Unfinished-answer guard fired on reviewer in real run. Added ReadCoverage guard (agent re-read a file 17× shifted by 1 line). Tests 134 pass.
+
+2026-10-01 18:00 +07 [answer-guards] Agents ended runs with announcements ("Now let me create a summary:") accepted as answers; questions fanned out + wrote files. Added core/answerGuards.ts: unfinished-answer nudge → no-tools final turn (all depths); 20-turn limit now answers instead of failing; answer-only questions told to all agents (prompt, not hard block); empty discussion reply retried without reasoning. Tests 133 pass.
+
+2026-10-01 17:54 +07 [laya-discussion] New Laya discussion policy (decision/policies/discussion.ts): effort choice + Supervisor consult noul, confidence-gated (enrich threshold), fallback to word estimate with visible reason. LayaHttpClient split: send() transport + ask(); cold Laya never blocks chat (fallback + background warm-up). Tests 125 pass; e2e with real Ollama + Laya 401 → Hello 0.2s, hard Q 9s via fallback.
+
+2026-10-01 17:48 +07 [thinking-runaway] Team "Hello" took 3m28s: qwen3.5:0.8b thought until 32k ctx full (temp 0.2 + thinking default on + Supervisor line in Team prompt). Fix: reasoning_effort "none" when not thinking, temp 0.2 only without reasoning, stream loop/size guard aborts and retries without reasoning, prompt cleanup. Real Ollama: Hello 0.3s, hard question 12.3s. Tests 118 pass.
+
+2026-10-01 17:32 +07 [thinking] Thinking mode Auto/On/Off (default Auto; toggle cycles). Shared core/reasoning.ts resolveReasoning used by discussion + assign; manual effort wins. Tests 116 pass, typecheck clean, chat render no script errors.
+
+2026-10-01 17:30 +07 [discussion] Auto effort (estimateDiscussionEffort: low/medium/high from length, code, attachments, hard terms); Supervisor thinks first, then calls consult_agents only if advice helps (stream_reset on switch); "ask all agents" unchanged; reasoning_effort 400 → retry without. Tests 112 pass, typecheck clean.
+
+2026-10-01 17:25 +07 [discussion] Supervisor no longer consults Researcher/Reviewer by default; greetings/small talk get a direct reply.
+
+2026-10-01 21:05 +07 [robot-face-turn] Face turns: screen face (eyes + mouth) follows gaze with near/far eye scaling and mouth narrowing; idle is a 6 s look-around (left/right/up/down) with head turning, sampled as 36 smooth avatar frames; talking turns between listeners; avatar head motion 75%; antenna ball turns red on error. Typecheck/tests pass; strips inspected.
+
+2026-10-01 20:40 +07 [robot-avatar-portrait] Avatars redesigned for 22–30 px: head-only near-frontal portrait (no 145% zoom crop), 40% head motion, bold face, drop shadow; idle avatars now animate (24-frame loop with blinks/glance/sway) with a random start per avatar. Chat reply avatar 24 px. Checked all states at 24/30/48 px light/dark and in the chat working feed; typecheck/tests pass.
+
+2026-10-01 20:05 +07 [robot-follow-through] Physical follow-through on the hero: spring-driven body/head/arm channels (overshoot and settle), antenna spring wobble, head bounce and lag on the coil neck (coil stretches), hinged claw fingers with per-state grip, anticipation before spin and walk. Live frames checked; typecheck/tests/pose probe pass.
+
+2026-10-01 19:30 +07 [robot-locomotion] Rigged legs (hip/knee/ankle pivots) with a stepping gait; new acts turn-around (360° spin with steps, turn wrapped after), walk (turn, stroll ±0.5, turn back, face front) and dance; added to idle play and data-robot-play. Pose probe disposes engines per shot; live loop checked with timer-driven frames. Typecheck/tests pass.
+
+2026-10-01 18:55 +07 [robot-play] Hero head/body play: follows the pointer (body < head < eyes, fades after 2.5 s), random idle acts every 5-10 s (curious, look-around, check-hand, nod, wiggle, stretch, peek), tap giggle, data-robot-play hook; avatars wave on hover when idle (React + chat). Added pose-probe script; verified acts/gaze with exact poses and the live loop with timer-driven frames. Typecheck/tests pass.
+
+2026-10-01 18:20 +07 [robot-face-anim] Eye/mouth animation: lid-based blinks (double/slow), eased gaze with held glances and reading scans, eye size changes, talking syllables with width variation and closed-lip gaps, bouncing grin, trembling frown. Avatar sheets 16 frames; talking/working/thinking loops 2.4 s. Face cache trimmed to glow-only 16-entry LRU at 640 px. Typecheck/tests pass; sheets inspected at 128 px.
+
+2026-10-01 17:52 +07 [robot-avatar-memo] Avatar memoizes run-state→animation; RobotGlyph memoizes one sheet request per state and the sheet style, keeps the previous sheet until the new one resolves, ignores superseded requests. Typecheck/tests/build pass.
+
+2026-10-01 17:40 +07 [robot-3d-animation] Connected the robot (shoulder sockets, full-length spring neck, thighs wrapping hip axle, ankle brackets, capped elbows, contact shadow) and rigged it (hip/neck/shoulder/elbow pivots). Added seven animated states with canvas face expressions; hero follows data-robot-state (wave greeting, listening while typing); avatar sheets via getAvatarSheet for React avatars (by agent run state) and a now-visible chat reply robot (thinking/working/talking/happy/error). Typecheck/tests pass; states, chat light/dark checked.
+
+2026-10-01 16:21 +07 [robot-3d-match] Tuned head/visor dimensions, glass reflection, torso height/width, armour shells, cuffs/claws, shoe stance and hero framing against target/3d-robot-full, -head and -detail. Updated robot design spec; fresh Babylon preview errors none, 24 px avatar visible; chat light/dark/HC and sidebar dark/HC checked. Typecheck and VSIX package pass; renderer bundle 2.1 MB.
+
+2026-10-01 16:05 +07 [robot-3d-reference-review] Compared the runtime against target/3d-robot-full.png, target/3d-robot-head.png, and target/3d-robot-detail.png. Preview reports errors: none and the 24 px avatar reads; visual gaps remain in head/visor width, torso height/placement, and mechanical limb detail.
+
+2026-10-01 16:55 +07 [robot-3d-full] Rebuilt body to target/3d-robot-full.png from per-row pixel measurements: tapered torso, ribbed spine, pelvis/hip axle, two-piece thigh/shin sleeves, blue knee/elbow joints, ankles, tread shoes; head scaled 1.15; brighter metal; standing idle (no bob). Chat welcome box made taller (170x300 / 104x180 / 84x150). Typecheck and webview tests pass; dark/light/narrow chat checked.
+
+2026-10-01 16:20 +07 [robot-3d-head-front] Matched head to new close-up target/3d-robot-head.png via pixel measurements and a preview-only head-front view: taller head (1.18:1), squircle recessed navy glass with bevel/gloss, smaller blue-glow eyes and thin smile, edge-on ear pads, gunmetal antenna on grey collar, coil-spring neck. Fixed mirrored screen UVs. Re-framed hero/avatar. Typecheck OK; body untouched.
+
+2026-10-01 15:52 +07 [robot-3d-head] Part-by-part pass from 3x crops at the reference's true 269x356 size (earlier compare stretched it 15%). Head: recessed screen carved into the shell, canvas-drawn face/glow (GlowLayer dropped), head tipped up/rolled/turned, front-facing ears, squat antenna. Body/arms/claws reworked but not yet signed off. preview.ts --compare now writes parts/*.png.
+
+2026-10-01 15:20 +07 [robot-3d-rollout] Verified chat welcome robot in light/dark/high-contrast and narrow layouts, checked shared React avatars and model comparison, packaged and installed the VSIX. `git diff --check` clean; package includes the 2.17 MB Babylon runtime.
+
+2026-10-01 15:14 +07 [robot-3d-clone] Rebuilt the Babylon robot to match target/3d-robot.png: rounded-cube head, bezelled visor, low puck ears, barrel torso, ribbed arms, big cuffs and pincers, no legs; PBR + ACES + face glow, 3/4 pose, blink. Avatar sprite fixed (renders after whenReadyAsync). Side-by-side compare, chat welcome light/dark checked; typecheck and webview tests pass. Bundle 1.67 → 2.17 MB. Skill gained a --compare mode and measured spec.
+
+2026-10-01 15:05 +07 [robot-3d-skill] Added .claude/skills/robot-3d: design spec from target/3d-robot.png, typechecked Babylon recipes (rounded-box head, egg torso, ribbed arms, pincer claws, PBR/glow), headless SwiftShader preview script. Preview found the avatar sprite renders empty (likely render before whenReadyAsync); not yet fixed.
+
+2026-10-01 14:54 +07 [robot-3d] Added a procedural Babylon robot for the chat welcome canvas and cached 3D head sprites for agent avatars across React surfaces; SVG fallback retained. Visual verification pending.
+
 2026-10-01 14:43 +07 [agent-icons-install] Packaged and installed the robot icon update successfully; reload the VS Code window to apply it.
 
 2026-10-01 14:42 +07 [agent-icons] Replaced the welcome sparkle and letter avatars with theme-aware robot marks inspired by the supplied bot references; light/dark/high-contrast and narrow renders checked.

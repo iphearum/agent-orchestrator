@@ -28,6 +28,7 @@ export function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, su
 </head>
 <body>
 <div id="root" data-surface="${surface}"></div>
+<script nonce="${nonce}" src="${asset("robot-runtime.js")}"></script>
 <script nonce="${nonce}" type="module" src="${asset("main.js")}"></script>
 </body>
 </html>`;

@@ -12,7 +12,7 @@ release/**
 bun.lock
 laya_agent_implementation_spec_v2.md
 webview-ui/**
-.claude/**
+.codex/**
 test-workspace/**
 vscode-extension-samples/**
 agent-core/**

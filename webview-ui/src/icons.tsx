@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   ArrowRight, Check, ChevronRight, CircleAlert, Code, Database,
   ExternalLink, File, Flag, FlaskConical, LayoutDashboard, ListChecks, ListTodo,
@@ -66,10 +67,46 @@ function AgentIcon({ size, className, title }: { size: number; className?: strin
   );
 }
 
-/** Round robot glyph used for every agent avatar; tinted by --agent. */
-export function RobotGlyph() {
+type RobotSheet = { url: string; frames: number; duration: number };
+
+/** One runtime request per animation state; the runtime caches sheets, so repeat requests are cheap lookups. */
+function requestSheet(state: RobotAnimationState): Promise<RobotSheet | undefined> | undefined {
+  const api = window.AgentRobot3D;
+  if (api?.getAvatarSheet) return api.getAvatarSheet(state);
+  return api?.getAvatarSprite().then(url => (url ? { url, frames: 1, duration: 0 } : undefined));
+}
+
+/**
+ * Round robot glyph used for every agent avatar; tinted by --agent. The SVG is the fallback; when the 3D runtime is
+ * loaded it is covered by a pre-rendered sheet for `state` (a still for idle, a looping strip otherwise).
+ * A state change memoizes a new request; the previous sheet stays on screen until the new one resolves, and a
+ * request that is superseded before it resolves is ignored.
+ */
+export function RobotGlyph({ state = "idle" }: { state?: RobotAnimationState }) {
+  const request = useMemo(() => requestSheet(state), [state]);
+  const [sheet, setSheet] = useState<RobotSheet>();
+  useEffect(() => {
+    let current = true;
+    void request?.then(value => {
+      if (current && value) setSheet(value);
+    });
+    return () => { current = false; };
+  }, [request]);
+  // A random start point per avatar (fixed for its lifetime) so a list of robots never blinks in unison.
+  const offset = useMemo(() => Math.random(), []);
+  const style = useMemo(
+    () => sheet && ({
+      backgroundImage: `url(${sheet.url})`,
+      "--frames": sheet.frames,
+      "--duration": `${sheet.duration}ms`,
+      animationDelay: `${-Math.round(offset * sheet.duration)}ms`
+    } as CSSProperties),
+    [sheet, offset]
+  );
+
   return (
-    <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
+    <>
+    <svg className="robot-glyph-fallback" viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
       <path d="M9 20.5h14a5 5 0 0 1 5 5v1H4v-1a5 5 0 0 1 5-5Z" fill="currentColor" opacity=".82" />
       <path d="M16 4v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <circle cx="16" cy="3" r="2" fill="currentColor" />
@@ -81,6 +118,8 @@ export function RobotGlyph() {
       <path d="M13 16.2q3 2.7 6 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       <path d="M11 26v2M21 26v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
+    {style && <span className="avatar-3d robot-sheet" style={style} aria-hidden="true" />}
+    </>
   );
 }
 

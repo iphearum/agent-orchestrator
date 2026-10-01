@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { isAnswerOnlyRequest, looksUnfinished, ReadCoverage } from "./answerGuards";
 import { AgentDatabase } from "../persistence/database";
 import { OpenAICompatibleModel } from "./model";
 import { AGENT_TOOLS, FULL_ACCESS_TOOLS } from "./tools";
@@ -42,7 +43,7 @@ export interface ChatRunOptions {
   images?: ChatImageAttachment[];
   attachedImageNames?: string[];
   thinking?: boolean;
-  reasoningEffort?: "low" | "medium" | "high";
+  reasoningEffort?: "none" | "low" | "medium" | "high";
   planMode?: boolean;
   title?: string;
   displayPrompt?: string;
@@ -117,12 +118,17 @@ export class Orchestrator {
     const imageNote = newImageNames.length ? `\n[${newImageNames.length} image${newImageNames.length === 1 ? "" : "s"} attached: ${newImageNames.join(", ")}]` : "";
     this.db.addConversationMessage(randomUUID(), conversationId, null, "user", (options.displayPrompt || instruction) + imageNote);
     const available = this.db.listAgents();
-    const shortFollowUp = instruction.trim().split(/\s+/).length <= 6;
+    // An assignment after a discussion wraps the client's words in the whole discussion; size and intent come from
+    // the client's own request, unless it only points back at the agreed discussion ("carry out what we agreed").
+    const ownRequest = options.displayPrompt || instruction;
+    const refersToDiscussion = /\b(?:carry out|do|start|implement|proceed with|go ahead with)\b.*\b(?:agreed|discussed|discussion|above)\b|^\s*(?:go ahead|proceed|do it|start)\s*[.!]?\s*$/i.test(ownRequest);
+    const intentText = refersToDiscussion ? instruction : ownRequest;
+    const shortFollowUp = ownRequest.trim().split(/\s+/).length <= 6;
     const routeMessage = shortFollowUp && previousRequests.length
-      ? `Earlier request: ${previousRequests.at(-1)}\nFollow-up: ${instruction}`
+      ? `Earlier request: ${previousRequests.at(-1)}\nFollow-up: ${ownRequest}`
       : instruction;
     // Team questions make the routing request several times larger; ask them only when the request looks like team work.
-    const askForTeam = mayNeedTeam(instruction) && !isSingleAgentConversationTurn(instruction);
+    const askForTeam = mayNeedTeam(intentText) && !isSingleAgentConversationTurn(ownRequest) && !isAnswerOnlyRequest(ownRequest);
     const route = autoRoute && this.runtimeConfig.layaEnabled
       ? await this.decisions.route({ agentId: rootAgentId, agentName: "global", message: routeMessage, availableTools: [], ...(askForTeam ? { teamPlanRequest: {
         objective: instruction, maxTasks: 12, agents: available.filter(agent => agent.id !== rootAgentId).map(({ id, name, description, skills }) => ({ id, name, description, skills }))
@@ -134,12 +140,12 @@ export class Orchestrator {
     const routedAgent = ["laya", "rules"].includes(route.source || "") && routeConfidence >= minimumRouteConfidence && typeof route.agent?.value === "string" ? route.agent.value : rootAgentId;
     const selected = this.db.getAgent(routedAgent) ? routedAgent : rootAgentId;
     const teamPlan = (route as AgentDecision & { teamPlan?: TeamPlan }).teamPlan;
-    const eligibleTeamPlan = !isSingleAgentConversationTurn(instruction) ? teamPlan : undefined;
+    const eligibleTeamPlan = askForTeam ? teamPlan : undefined;
     this.db.trace(conversationId, rootTaskId, eligibleTeamPlan?.tasks.length ? "lead" : selected, "routing", {
       ...route,
       routeContextUsed: routeMessage !== instruction,
       teamPlanRequested: askForTeam,
-      ...(teamPlan && !eligibleTeamPlan ? { teamPlan: undefined, teamPlanSkipped: "single_agent_conversation_turn" } : {})
+      ...(teamPlan && !eligibleTeamPlan ? { teamPlan: undefined, teamPlanSkipped: isAnswerOnlyRequest(ownRequest) ? "question_answered_by_one_agent" : "single_agent_conversation_turn" } : {})
     });
     // Laya may hand back a team plan. Without one, the agent decides who to involve: it can ask, delegate to, or
     // run a team of any other agents (delegate_team), and those agents can do the same.
@@ -152,6 +158,7 @@ export class Orchestrator {
       delegationCount: 0,
       ancestorAgents: [],
       conversationId,
+      answerOnly: isAnswerOnlyRequest(options.displayPrompt || instruction),
       images: options.images,
       thinking: options.thinking,
       reasoningEffort: options.reasoningEffort,
@@ -168,6 +175,7 @@ export class Orchestrator {
     this.db.createTask({ id: rootTaskId, rootId: rootTaskId, ownerAgentId: coordinator.id, instruction: request, depth: 0 });
     const ctx: RunContext = {
       rootTaskId, taskId: rootTaskId, depth: 0, delegationCount: 0, ancestorAgents: [], conversationId,
+      answerOnly: isAnswerOnlyRequest(options.displayPrompt || request),
       images: options.images, thinking: options.thinking, reasoningEffort: options.reasoningEffort,
       approvalMode: options.approvalMode, providerId: options.providerId, model: options.model, existingTask: true
     };
@@ -252,7 +260,7 @@ export class Orchestrator {
           return this.runAgent(item.agent_id, instruction, {
             rootTaskId: ctx.rootTaskId, taskId: taskIds.get(item.id)!, depth: ctx.depth + 1, delegationCount: ctx.delegationCount + 1,
             ancestorAgents: [...ctx.ancestorAgents, caller.id], conversationId: ctx.conversationId,
-            images: ctx.images, thinking: ctx.thinking, reasoningEffort: ctx.reasoningEffort, planMode: ctx.planMode,
+            images: ctx.images, thinking: ctx.thinking, reasoningEffort: ctx.reasoningEffort, planMode: ctx.planMode, answerOnly: ctx.answerOnly,
             approvalMode: ctx.approvalMode, providerId: ctx.providerId, model: ctx.model, existingTask: true
           }, ctx.taskId);
         }));
@@ -395,12 +403,14 @@ export class Orchestrator {
     let shortenedResults = 0;
     // Identical reads within one agent run return a reminder instead of the same content again.
     const earlierReads = new Map<string, string>();
+    const readCoverage = new ReadCoverage();
     // A call that failed fails again with the same arguments; small models otherwise retry it until the turn limit.
     const failedCalls = new Map<string, string>();
     const failedToolCounts = new Map<string, number>();
     const disabledTools = new Set<string>();
     let failedDelegations = 0;
     let askedForAnswer = false;
+    let unfinishedNudges = 0;
     // External tools: the agent always gets find_tools, plus the few tools most relevant to the task (spec: 1–3 schemas, not all).
     const externalForAgent: ExternalTool[] = ctx.planMode ? [] : this.externalTools?.forAgent(agentId) ?? [];
     const activeExternal = new Map<string, ExternalTool>();
@@ -468,6 +478,11 @@ export class Orchestrator {
 
     try {
       for (let turn = 0; turn < 20; turn++) {
+        if (turn === 19 && !askedForAnswer) {
+          // Last turn: answer with what has been gathered rather than ending the run with an error and no answer.
+          askedForAnswer = true;
+          messages.push({ role: "user", content: "You have used all your tool turns. Give your final answer now from the conversation and tool results so far; no tools are available. Say briefly what you could not finish." });
+        }
         const automaticThreshold = localDecision.source === "rules" ? (this.runtimeConfig.contextEnrichmentConfidence ?? .65) : (this.runtimeConfig.automaticExecutionConfidence ?? .9);
         const modeTools = (["laya", "rules"].includes(localDecision.source || "") && localDecision.tool.confidence >= automaticThreshold
           ? this.filterByCategory(decisionTools, String(localDecision.tool.value))
@@ -516,6 +531,19 @@ export class Orchestrator {
           }
           const modelName = ctx.model || agent.model;
           throw new Error(`The model${modelName ? ` (${modelName})` : ""} returned an empty answer${response.thinkingText ? " after reasoning" : ""}. Try a larger model, a lower reasoning effort, or a new chat with less history.`);
+        }
+
+        if (!response.toolCalls.length && !recoveryAttempt && looksUnfinished(response.content ?? "")) {
+          // The reply announced a next step but did not take it. First nudge: act or answer. Second: answer without tools.
+          if (ctx.depth === 0) this.emit("stream_reset", agentId, "");
+          this.db.trace(ctx.conversationId, ctx.taskId, agentId, "decision", { kind: "unfinished_answer", nudge: unfinishedNudges + 1, preview: (response.content ?? "").slice(-200) });
+          if (unfinishedNudges++ === 0) {
+            messages.push({ role: "user", content: "You announced a next step but did not take it. If you need a tool, call it now. Otherwise give your complete final answer now, not a description of what you will do." });
+          } else {
+            askedForAnswer = true;
+            messages.push({ role: "user", content: "Give your complete final answer now from what you already have; no tools are available. Do not describe further steps." });
+          }
+          continue;
         }
 
         if (!response.toolCalls.length) {
@@ -598,6 +626,7 @@ export class Orchestrator {
             this.emit("tool", agentId, `Using ${call.function.name}`, { phase: "start", toolCallId: call.id, toolName: call.function.name, path: toolPath });
             result = await runCall();
           }
+          if (call.function.name === "read_file") result = readCoverage.check(result) ?? result;
           const toolError = (() => { try { const error = JSON.parse(result)?.error; return error ? String(error) : ""; } catch { return ""; } })();
           const toolFailed = Boolean(toolError);
           if (toolFailed) {
@@ -872,6 +901,7 @@ export class Orchestrator {
         thinking: ctx.thinking,
         reasoningEffort: ctx.reasoningEffort,
         planMode: ctx.planMode,
+        answerOnly: ctx.answerOnly,
         approvalMode: ctx.approvalMode,
         providerId: ctx.providerId,
         model: ctx.model
@@ -996,6 +1026,7 @@ ${this.workspaceSection(agent, ctx)}${this.teamSection(agent, ctx, instruction)}
 - You can call more agents after you see results, as often as the work needs.
 - Do not delegate merely to repeat your own work.
 - Integrate delegated results into your own final answer.
+- Finish with the result itself. Do not end a reply by announcing what you will do next ("Let me…", "Now I'll…"): either call the tool now or give the answer.
 - Never invent tool results.
 - Avoid delegation loops.
 
@@ -1003,7 +1034,7 @@ Runtime:
 - delegation depth: ${ctx.depth}
 - ancestor agents: ${ctx.ancestorAgents.join(" -> ") || "(none)"}
 ${ctx.ancestorAgents.length ? `- You are working for ${ctx.ancestorAgents.at(-1)}, not talking to the user. You cannot ask the user anything. If details are missing, make reasonable assumptions, state them, and list open questions in your answer.\n` : ""}${ctx.thinking ? `\nReasoning preference: use ${ctx.reasoningEffort || "medium"} effort to reason privately, then give a concise answer with the key rationale. Do not reveal private chain-of-thought.` : ""}
-${ctx.planMode ? "\nPlan mode is active. Analyze the request and return a clear ordered plan. Do not implement changes, delegate work, or modify memory. You may save the plan with create_plan." : ""}
+${ctx.answerOnly && !ctx.planMode ? "\nThe client asked a question. Answer it directly and completely. Read and search as needed, but do not create, modify or delete files, and involve other agents only when you cannot answer without them.\n" : ""}${ctx.planMode ? "\nPlan mode is active. Analyze the request and return a clear ordered plan. Do not implement changes, delegate work, or modify memory. You may save the plan with create_plan." : ""}
 
 Relevant persistent memory:
 ${memories.length ? memories.map(m => `- ${m}`).join("\n") : "(none)"}

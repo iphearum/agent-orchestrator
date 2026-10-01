@@ -1,14 +1,32 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { AgentRef, AgentRunState } from "@shared/protocol";
 import { agentStyle } from "./agentColors";
 import { agentStateLabel } from "./format";
 import { Icon, RobotGlyph, type IconName } from "./icons";
 import MarkdownIt from "markdown-it";
 
-export function Avatar({ agent, size = 28 }: { agent: Pick<AgentRef, "id" | "color">; size?: number }) {
+/** Agent run state → avatar animation; idle and anything unknown show the still. */
+const AVATAR_ANIMATION: Record<AgentRunState, RobotAnimationState> = {
+  idle: "idle", thinking: "thinking", running: "working", delegating: "talking", waiting: "listening", failed: "error"
+};
+
+export function Avatar({ agent, size = 28 }: { agent: Pick<AgentRef, "id" | "color"> & { state?: AgentRunState }; size?: number }) {
+  const [hovered, setHovered] = useState(false);
+  // Re-derive the animation only when the run state or hover changes, not on every parent render.
+  // An idle avatar waves while hovered; a busy one keeps showing what it is doing.
+  const animation = useMemo<RobotAnimationState>(() => {
+    const busy = agent.state ? AVATAR_ANIMATION[agent.state] : "idle";
+    return hovered && busy === "idle" ? "happy" : busy;
+  }, [agent.state, hovered]);
   return (
-    <span className="avatar" style={{ ...agentStyle(agent.color || agent.id), width: size, height: size }} aria-hidden="true">
-      <RobotGlyph />
+    <span
+      className="avatar"
+      style={{ ...agentStyle(agent.color || agent.id), width: size, height: size }}
+      aria-hidden="true"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <RobotGlyph state={animation} />
     </span>
   );
 }

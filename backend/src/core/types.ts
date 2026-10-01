@@ -65,8 +65,10 @@ export interface RunContext {
   conversationId?: string;
   images?: ChatImageAttachment[];
   thinking?: boolean;
-  reasoningEffort?: "low" | "medium" | "high";
+  reasoningEffort?: "none" | "low" | "medium" | "high";
   planMode?: boolean;
+  /** The client asked a question: answer it and leave the workspace unchanged. Inherited by every delegated agent. */
+  answerOnly?: boolean;
   approvalMode?: "ask" | "approve" | "full";
   providerId?: string;
   model?: string;
