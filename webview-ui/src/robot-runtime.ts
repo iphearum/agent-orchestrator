@@ -847,13 +847,13 @@ function buildWantedVisor(scene: Scene, head: TransformNode, shell: PBRMaterial)
 }
 
 /** Egg-shaped torso from a lathe: a superellipse profile, fuller toward the bottom, with a flat top for the neck socket. */
-function eggTorso(scene: Scene, name: string, width: number, height: number) {
+function eggTorso(scene: Scene, name: string, width: number, height: number, taper = 0.08) {
   const shape: Vector3[] = [];
   for (let i = 0; i <= 40; i++) {
     const t = -Math.PI / 2 + (Math.PI * i) / 40;
     const s = Math.sin(t);
     const y = Math.sign(s) * Math.abs(s) ** (2 / 2.6) * height / 2;
-    const radius = Math.abs(Math.cos(t)) ** (2 / 2.6) * width / 2 * (1 - 0.08 * (y / (height / 2) + 1) / 2);
+    const radius = Math.abs(Math.cos(t)) ** (2 / 2.6) * width / 2 * (1 - taper * (y / (height / 2) + 1) / 2);
     shape.push(new Vector3(radius, y, 0));
   }
   return MeshBuilder.CreateLathe(name, { shape, tessellation: 48 }, scene);
@@ -934,38 +934,40 @@ function buildWantedRobot(scene: Scene): WantedRobot {
   // Head: near-spherical helmet facing a little toward the viewer's left and tipped ~6°, as in the target.
   const head = new TransformNode("wanted-head", scene);
   head.parent = root;
-  head.position.set(0.04, WANTED_HEAD.y, 0);
+  // The clay side views put the head ~0.2 forward of the torso.
+  head.position.set(0.04, WANTED_HEAD.y, 0.2);
   head.rotation.set(0, 0.15, 0.1);
   place(roundedBox(scene, "wanted-head-shell", new Vector3(WANTED_HEAD.width, WANTED_HEAD.height, WANTED_HEAD.depth), WANTED_HEAD.xy, WANTED_HEAD.z, 64), head, p.shell);
   buildWantedVisor(scene, head, p.shell);
   // Ear pods: discs with flat outer faces and a slightly raised inner plate.
   for (const side of [-1, 1]) {
-    const pod = place(roundedBox(scene, `wanted-ear-${side}`, new Vector3(1.04, 1.06, 0.34), 2.1, 3.4, 32), head, p.shell, new Vector3(side * 1.3, -0.04, 0.08));
+    const pod = place(roundedBox(scene, `wanted-ear-${side}`, new Vector3(1.04, 1.06, 0.3), 2.1, 3.4, 32), head, p.shell, new Vector3(side * 1.26, -0.04, 0.08));
     pod.rotation.y = Math.PI / 2;
-    const plate = place(roundedBox(scene, `wanted-ear-plate-${side}`, new Vector3(0.8, 0.82, 0.1), 2.1, 3, 24), head, p.shell, new Vector3(side * 1.48, -0.04, 0.08));
+    const plate = place(roundedBox(scene, `wanted-ear-plate-${side}`, new Vector3(0.8, 0.82, 0.1), 2.1, 3, 24), head, p.shell, new Vector3(side * 1.42, -0.04, 0.08));
     plate.rotation.y = Math.PI / 2;
   }
   // Antenna: domed collar, thin grey metal stem leaning a little, white ball.
   const collar = place(MeshBuilder.CreateSphere("wanted-antenna-collar", { diameter: 0.56, segments: 24, slice: 0.5 }, scene), head, p.shell, new Vector3(0, 1.08, -0.18));
   collar.scaling.y = 0.55;
   const stemBase = new Vector3(0, 1.2, -0.18);
-  const stemTop = new Vector3(-0.04, 1.52, -0.26);
-  const stem = place(MeshBuilder.CreateCylinder("wanted-antenna-stem", { diameter: 0.075, height: 0.36, tessellation: 16 }, scene), head, p.metal, Vector3.Lerp(stemBase, stemTop, 0.5));
+  const stemTop = new Vector3(-0.1, 1.6, -0.26);
+  const stem = place(MeshBuilder.CreateCylinder("wanted-antenna-stem", { diameter: 0.075, height: stemTop.subtract(stemBase).length(), tessellation: 16 }, scene), head, p.metal, Vector3.Lerp(stemBase, stemTop, 0.5));
   stem.rotationQuaternion = alignY(stemTop.subtract(stemBase));
-  place(MeshBuilder.CreateSphere("wanted-antenna-tip", { diameter: 0.36, segments: 28 }, scene), head, p.shell, new Vector3(-0.05, 1.66, -0.29));
+  place(MeshBuilder.CreateSphere("wanted-antenna-tip", { diameter: 0.36, segments: 28 }, scene), head, p.shell, new Vector3(-0.12, 1.75, -0.28));
 
   // Neck connector: a grey collar and a narrower post that plugs into the torso's grey socket.
-  wantedRing(p, "wanted-neck-collar", root, new Vector3(0.02, 2.74, 0), Vector3.Up(), 0.78, 0.18);
-  wantedRing(p, "wanted-neck-post", root, new Vector3(0.02, 2.6, 0), Vector3.Up(), 0.6, 0.18);
-  const torso = place(eggTorso(scene, "wanted-torso", 1.78, 2.1), root, p.shell, new Vector3(0, 1.6, 0));
+  wantedRing(p, "wanted-neck-collar", root, new Vector3(0.02, 2.74, 0.1), Vector3.Up(), 0.78, 0.18);
+  wantedRing(p, "wanted-neck-post", root, new Vector3(0.02, 2.6, 0.05), Vector3.Up(), 0.6, 0.18);
+  const torso = place(eggTorso(scene, "wanted-torso", 1.8, 2.24, 0.14), root, p.shell, new Vector3(0, 1.52, 0));
   torso.scaling.z = 0.98;
   wantedRing(p, "wanted-torso-socket", root, new Vector3(0, 2.62, 0), Vector3.Up(), 0.98, 0.06);
 
   // Waving arm (+X, the viewer's left): low elbow, forearm up, open mitten facing the viewer.
   const wave = wantedArm(p, "wanted-wave", root, new Vector3(0.92, 2.32, 0.05), new Vector3(1.22, 1.7, 0.55), new Vector3(1.42, 2.12, 1.05), 1);
   const waveHand = wantedHand(p, "wanted-wave-hand", wave.forearm, 1, 0.05);
-  waveHand.position.copyFrom(wave.wristLocal.add(new Vector3(0.06, 0.24, 0.02)));
-  waveHand.rotation.set(0, 0, -0.3);
+  waveHand.position.copyFrom(wave.wristLocal.add(new Vector3(0.1, 0.26, 0.02)));
+  waveHand.rotation.set(0, 0, -0.4);
+  waveHand.scaling.setAll(1.15);
 
   // Resting arm (−X): hangs at the side, mitten pointing down with the thumb toward the body.
   const rest = wantedArm(p, "wanted-rest", root, new Vector3(-0.82, 2.2, 0.05), new Vector3(-1.04, 1.7, 0.5), new Vector3(-1.2, 1.28, 1.1), -1);
