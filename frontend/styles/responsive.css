@@ -1,0 +1,143 @@
+/* The React screen is the layout owner; the legacy renderer still owns the
+   editor, terminal, chat actions, and their existing IDs. */
+.nextjs-screen {
+  width: 100%;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 38px minmax(0, 1fr) 23px;
+}
+
+.nextjs-screen [data-screen-part] {
+  display: contents;
+}
+
+.nextjs-screen .workbench {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nextjs-screen .main-column,
+.nextjs-screen .side-panel,
+.nextjs-screen .chat-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.renderer-startup-error {
+  position: fixed;
+  z-index: 1000;
+  inset: 38px 12px auto;
+  max-height: 45vh;
+  overflow: auto;
+  padding: 12px 16px;
+  border: 1px solid #a43c3c;
+  border-radius: 6px;
+  background: #321f22;
+  color: #ffe2e2;
+  box-shadow: 0 8px 30px #0008;
+  font: 12px/1.5 ui-monospace, Consolas, monospace;
+}
+
+.renderer-startup-error pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+@media (max-height: 620px) {
+  .nextjs-screen {
+    min-height: 0;
+    grid-template-rows: 34px minmax(0, 1fr) 22px;
+  }
+
+  .nextjs-screen .main-column {
+    grid-template-rows: 32px minmax(90px, 1fr) 4px minmax(110px, 34vh);
+  }
+
+  .nextjs-screen .chat-composer textarea {
+    min-height: 42px;
+  }
+}
+
+@media (max-width: 640px) {
+  .nextjs-screen .titlebar {
+    gap: 5px;
+    padding-inline: 6px;
+  }
+
+  .nextjs-screen .menubar {
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nextjs-screen .menubar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nextjs-screen .navigation-history,
+  .nextjs-screen .title-actions {
+    display: none;
+  }
+
+  .nextjs-screen .command-center {
+    min-width: 0;
+    max-width: 34vw;
+    flex: 0 1 150px;
+  }
+
+  .nextjs-screen .window-controls {
+    flex: none;
+  }
+
+  .nextjs-screen .statusbar {
+    gap: 7px;
+    padding-inline: 6px;
+  }
+
+  .nextjs-screen .statusbar > span:nth-child(n + 5) {
+    display: none;
+  }
+
+  .nextjs-screen .chat-composer {
+    margin-inline: 6px;
+  }
+
+  .nextjs-screen .composer-footer {
+    min-width: 0;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nextjs-screen .composer-tools,
+  .nextjs-screen .composer-actions {
+    flex: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .nextjs-screen .title-mark,
+  .nextjs-screen .command-center,
+  .nextjs-screen .chat-subtitle {
+    display: none;
+  }
+
+  .nextjs-screen .titlebar .menubar {
+    flex: 1;
+  }
+
+  .nextjs-screen .window-controls button {
+    width: 30px;
+  }
+
+  .nextjs-screen .workbench.chat-focused .chat-header {
+    padding-inline: 9px;
+  }
+
+  .nextjs-screen .workbench.chat-focused .chat-composer textarea {
+    min-height: 58px;
+  }
+}

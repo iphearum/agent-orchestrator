@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- Browser dev loop with design fixtures: bun --port=5174 webview-ui/dev.html  (add ?surface=sidebar for the sidebar). Not shipped. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Agent Orchestration (dev)</title>
+  <!-- Error probe read by .claude/skills/ui-verify/scripts/shoot.ts --dump -->
+  <script>addEventListener("error", e => { const d = document.documentElement; d.dataset.err = (d.dataset.err || "") + " | " + e.message + " @" + e.lineno; });</script>
+</head>
+<body>
+  <div id="root" data-surface="task"></div>
+  <script>
+    const params = new URLSearchParams(location.search), surface = params.get("surface");
+    // ?theme=light approximates VS Code's Light Modern; the default fallbacks in styles.css are Dark Modern.
+    if (params.get("theme") === "light") document.documentElement.style.cssText = "--vscode-editor-background:#fff;--vscode-sideBar-background:#f8f8f8;--vscode-editorWidget-background:#f8f8f8;--vscode-list-hoverBackground:#f2f2f2;--vscode-panel-border:#e5e5e5;--vscode-input-border:#cecece;--vscode-foreground:#3b3b3b;--vscode-editor-foreground:#1f1f1f;--vscode-descriptionForeground:#717171;--vscode-button-background:#005fb8;--vscode-button-hoverBackground:#0258a8;--vscode-button-secondaryBackground:#e5e5e5;--vscode-button-secondaryForeground:#3b3b3b;--vscode-list-activeSelectionBackground:#e8e8e8;--vscode-list-activeSelectionForeground:#000;--vscode-focusBorder:#005fb8;--vscode-input-background:#fff;--vscode-badge-background:#cccedb;--vscode-badge-foreground:#3b3b3b;--vscode-testing-iconPassed:#388a34;--vscode-editorIndentGuide-background1:#d3d3d3;--vscode-textLink-foreground:#005fb8;--vscode-charts-green:#388a34;--vscode-charts-blue:#1a85ff;--vscode-charts-purple:#652d90";
+    if (surface === "overview") document.getElementById("root").dataset.surface = "overview";
+    if (surface === "sidebar") {
+      const root = document.getElementById("root");
+      root.dataset.surface = "sidebar";
+      root.style.cssText = "width:300px;height:100vh;border-right:1px solid #2b2b2b";
+    }
+  </script>
+  <script type="module" src="./src/main.tsx"></script>
+</body>
+</html>

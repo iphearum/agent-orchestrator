@@ -4,11 +4,12 @@
     "module": "commonjs",
     "lib": ["ES2022", "DOM"],
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "backend/src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "sourceMap": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["backend/src/**/*.ts"],
+  "exclude": ["backend/src/**/*.test.ts"]
 }

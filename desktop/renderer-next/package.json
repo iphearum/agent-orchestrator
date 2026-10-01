@@ -1,0 +1,18 @@
+{
+  "name": "agent-workbench-next-renderer",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack --port 3000",
+    "build": "next build --webpack"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "latest",
+    "postcss": "latest",
+    "tailwindcss": "latest"
+  }
+}

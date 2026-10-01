@@ -1,4 +1,10 @@
 node_modules
+agent-core/.venv/
+agent-core/**/__pycache__/
+agent-core/data/*.db*
 release
 dist
-desktop/renderer/dist
+desktop/renderer-next/.next
+desktop/renderer-next/out
+test-workspace/.vscode/settings.json
+.ui-check/

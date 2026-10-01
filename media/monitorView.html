@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; script-src 'nonce-{{nonce}}';">
+  <link rel="stylesheet" href="{{cssUri}}">
+</head>
+<body>
+  <main class="workbench" aria-label="Agent orchestration workbench">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✣</span><span>AGENT ORCHESTRATION</span></div>
+      <div class="workspace-switcher"><span>WORKSPACE</span><button type="button" id="workspace-name">Local workspace <span aria-hidden="true">⌄</span></button></div>
+      <nav class="primary-nav" aria-label="Workbench sections">
+        <button class="nav-item active" data-section="overview"><span>◈</span>Overview</button>
+        <button class="nav-item" data-section="tasks"><span>▤</span>Tasks</button>
+        <button class="nav-item" data-section="agents"><span>♙</span>Agents</button>
+        <button class="nav-item" data-section="knowledge"><span>⌘</span>Knowledge (JEV)</button>
+        <button class="nav-item" data-section="memory"><span>◉</span>Memory</button>
+        <button class="nav-item" data-section="tools"><span>⚒</span>Tools</button>
+        <button class="nav-item" data-section="settings"><span>⚙</span>Settings</button>
+      </nav>
+      <section class="sidebar-section agent-section">
+        <header><span>AGENTS</span><span id="agent-total" class="section-count">0</span></header>
+        <div id="agent-list" class="agent-list"></div>
+      </section>
+      <section class="sidebar-section task-section">
+        <header><span>ACTIVE TASKS</span><span id="task-total" class="section-count">0</span></header>
+        <div id="task-list" class="task-list"></div>
+      </section>
+      <div class="sidebar-footer"><i id="laya-dot" class="health-dot"></i><span id="sidebar-status">Connecting to SQLite</span></div>
+    </aside>
+
+    <section class="main-area">
+      <header class="task-header">
+        <div class="task-title-wrap">
+          <div class="task-title-line"><span id="task-number" class="task-number">—</span><h1 id="task-title">No tasks yet</h1><span id="task-status" class="status-pill">Idle</span></div>
+          <p id="task-description">Start a conversation with an agent to see its work here.</p>
+          <div id="task-tags" class="task-tags"></div>
+        </div>
+        <div class="task-header-meta"><span id="task-started">Waiting for the first task</span><button id="refresh" type="button" title="Refresh runtime data">↻ <span>Refresh</span></button></div>
+      </header>
+
+      <div class="content-split">
+        <section class="center-column">
+          <nav class="workspace-tabs" aria-label="Task views">
+            <button class="workspace-tab active" data-view="flow">Agent Flow</button>
+            <button class="workspace-tab" data-view="plan">Task Plan</button>
+            <button class="workspace-tab" data-view="files">Files</button>
+            <button class="workspace-tab" data-view="timeline">Timeline</button>
+            <button class="workspace-tab" data-view="metrics">Metrics</button>
+            <span class="tab-spacer"></span><span class="live-label"><i></i> LIVE</span>
+          </nav>
+
+          <div id="task-workspace" class="task-workspace">
+            <section id="flow-view" class="view-panel flow-view"><div id="agent-flow" class="agent-flow"></div></section>
+            <section id="plan-view" class="view-panel plan-view hidden"><div id="plan-content"></div></section>
+            <section id="files-view" class="view-panel files-view hidden"><div id="files-content"></div></section>
+            <section id="timeline-view" class="view-panel timeline-view hidden"><div id="timeline-content"></div></section>
+            <section id="metrics-view" class="view-panel metrics-view hidden"><div id="metrics-content"></div></section>
+          </div>
+
+          <section class="activity-area">
+            <header class="activity-header">
+              <nav class="activity-tabs" aria-label="Task activity filters">
+                <button class="activity-tab active" data-filter="work">Agent Work</button>
+                <button class="activity-tab" data-filter="chat">Chat</button>
+                <button class="activity-tab" data-filter="tools">Tool Calls</button>
+                <button class="activity-tab" data-filter="files">Files</button>
+                <button class="activity-tab" data-filter="logs">Logs</button>
+              </nav>
+              <span id="activity-count" class="activity-count">0 events</span>
+            </header>
+            <div id="activity-list" class="activity-list"></div>
+          </section>
+        </section>
+
+        <aside class="details-pane">
+          <nav class="detail-tabs" aria-label="Selected item details">
+            <button class="detail-tab active" data-detail="task">Task Details</button>
+            <button class="detail-tab" data-detail="agent">Agent Details</button>
+            <button class="detail-tab" data-detail="files">File Changes</button>
+          </nav>
+          <div id="details-content" class="details-content"></div>
+        </aside>
+        <section id="secondary-page" class="secondary-page hidden"></section>
+      </div>
+      <footer class="statusbar"><span><i class="health-dot"></i>Runtime connected</span><span id="status-agent">Agents: 0</span><span id="status-tasks">Tasks: 0</span><span id="status-laya">Laya: checking</span><span>SQLite</span></footer>
+    </section>
+  </main>
+  <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
+</body>
+</html>

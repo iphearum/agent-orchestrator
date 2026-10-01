@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src blob:;" />
+    <title></title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="titlebar">
+        <div class="title-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18.2 2.1 7.1 11.2 3 7.9 1.4 9.5 5.8 12 1.4 14.5 3 16.1l4.1-3.3 11.1 9.1 4.1-1.6V3.7l-4.1-1.6Zm-.5 4.1v11.6L10.6 12l7.1-5.8Z"/></svg></div>
+        <nav class="menubar" role="menubar" aria-label="Application menu">
+          <div class="menu-host"><button class="menu-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="file">File</button><div class="app-menu hidden" role="menu"><button data-command="open-folder">Open Folder…<kbd>Ctrl+O</kbd></button><button data-command="save">Save<kbd>Ctrl+S</kbd></button><button data-command="settings">Preferences: Settings<kbd>Ctrl+,</kbd></button><div class="menu-separator"></div><button data-command="exit">Exit</button></div></div>
+          <div class="menu-host"><button class="menu-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="edit">Edit</button><div class="app-menu hidden" role="menu"><button data-command="undo">Undo<kbd>Ctrl+Z</kbd></button><button data-command="redo">Redo<kbd>Ctrl+Y</kbd></button><div class="menu-separator"></div><button data-command="cut">Cut<kbd>Ctrl+X</kbd></button><button data-command="copy">Copy<kbd>Ctrl+C</kbd></button><button data-command="paste">Paste<kbd>Ctrl+V</kbd></button></div></div>
+          <div class="menu-host"><button class="menu-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="selection">Selection</button><div class="app-menu hidden" role="menu"><button data-command="select-all">Select All<kbd>Ctrl+A</kbd></button></div></div>
+          <div class="menu-host"><button class="menu-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="view">View</button><div class="app-menu hidden" role="menu"><button data-command="explorer">Explorer</button><button data-command="search">Search</button><button data-command="agents">Agents</button><button data-command="runs">Agent Runs</button><button data-command="chat">Agent Chat</button><div class="menu-separator"></div><button data-command="toggle-terminal">Toggle Terminal Panel</button></div></div>
+          <div class="menu-host"><button class="menu-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="go">Go</button><div class="app-menu hidden" role="menu"><button data-command="explorer">Explorer</button><button data-command="search">Search</button><button data-command="chat">Agent Chat</button><button data-command="settings">Settings</button></div></div>
+          <div class="menu-host"><button class="menu-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="run">Run</button><div class="app-menu hidden" role="menu"><button data-command="new-chat">New Agent Conversation</button><button data-command="focus-prompt">Focus Agent Prompt</button></div></div>
+          <div class="menu-host"><button class="menu-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="terminal">Terminal</button><div class="app-menu hidden" role="menu"><button data-command="new-terminal">New Terminal<kbd>Ctrl+Shift+`</kbd></button><button data-command="split-terminal">Split Terminal<kbd>Ctrl+Shift+5</kbd></button><button data-command="kill-terminal">Kill Terminal</button></div></div>
+          <div class="menu-host"><button class="menu-trigger" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="help">Help</button><div class="app-menu hidden" role="menu"><button data-command="about">About Agent Workbench</button></div></div>
+        </nav>
+        <div class="navigation-history" aria-label="Navigation history"><button type="button" disabled title="Back" aria-label="Back"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg></button><button type="button" disabled title="Forward" aria-label="Forward"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button></div>
+        <button id="open-folder" class="command-center" title="Open or switch workspace"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.7H14v6.3H2z"/><path d="M2 4.5V3h3.5L7 4.5"/></svg><span id="workspace-title">No folder open</span><span class="command-chevron">⌄</span></button>
+        <div class="title-actions"><button id="open-settings" class="icon-button" title="Settings">⚙</button></div>
+        <div class="window-controls" aria-label="Window controls"><button id="window-minimize" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8"/></svg></button><button id="window-maximize" title="Maximize or restore" aria-label="Maximize or restore"><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="2" width="8" height="8"/></svg></button><button id="window-close" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 3 6 6M9 3 3 9"/></svg></button></div>
+      </header>
+      <main class="workbench">
+        <nav class="activity-bar" aria-label="Activity bar">
+          <button class="activity active" data-view="explorer" title="Explorer" aria-label="Explorer" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.5h6v15H4zM14 4.5h6v6h-6zM14 14h6v5.5h-6z"/></svg></button>
+          <button class="activity" data-view="search" title="Search workspace" aria-label="Search workspace" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg></button>
+          <button class="activity" data-view="agents" title="Agents" aria-label="Agents" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19v-1.5a5.5 5.5 0 0 1 11 0V19zM16 5.5a3 3 0 0 1 0 5.8M17 14a4.5 4.5 0 0 1 3.5 4.4V19h-4"/></svg></button>
+          <button class="activity" data-view="runs" title="Agent runs" aria-label="Agent runs" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></button>
+          <button class="activity" data-view="chat" title="Agent chat" aria-label="Agent chat" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H9l-5 3z"/><path d="M8 10h8M8 13h5"/></svg></button>
+          <div class="activity-spacer"></div>
+          <button id="activity-settings" class="activity" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4m9.2 9.2L18 18m0-12-1.4 1.4m-9.2 9.2L6 18"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.7"/></svg></button>
+        </nav>
+        <aside class="side-panel">
+          <div class="side-heading"><span id="side-title">EXPLORER</span><div class="side-heading-actions"><button id="new-chat-history" class="small-action hidden" title="New chat" aria-label="New chat">＋</button><button id="new-agent" class="small-action hidden" title="Add agent" aria-label="Add agent">＋</button></div></div>
+          <div id="side-content" class="side-content"></div>
+        </aside>
+        <div id="side-resize" class="resize-handle side-resize" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" aria-valuemin="190" aria-valuemax="430" tabindex="0" title="Drag or use arrow keys to resize sidebar"></div>
+        <section class="main-column">
+          <div id="editor-tabs" class="editor-tabs" role="tablist" aria-label="Open editors"></div>
+          <div id="editor-area" class="editor-area">
+            <div id="editor-breadcrumbs" class="editor-breadcrumbs hidden" aria-label="File path"></div>
+            <div id="monaco"></div>
+            <div id="custom-view" class="custom-view hidden"></div>
+            <div id="welcome" class="welcome overview-dashboard">
+  <section class="overview-network panel-card">
+    <header class="overview-panel-heading"><div><span class="overview-eyebrow">ORCHESTRATION</span><h1>Agent network</h1></div><span class="live-badge"><i></i> LIVE</span></header>
+    <p class="overview-caption">Shared context connects your tools, specialist agents, and the main model.</p>
+    <div id="overview-network-graph" class="overview-network-graph" aria-label="Agent orchestration map"></div>
+    <footer class="overview-network-footer"><span><i class="legend-dot source-dot"></i>Context sources</span><span><i class="legend-dot agent-dot"></i>Specialist agents</span><span><i class="legend-dot core-dot"></i>Orchestrator</span></footer>
+  </section>
+  <section class="overview-monitor">
+    <header class="overview-topbar"><div><span class="overview-eyebrow">RUNTIME MONITOR</span><h2>System overview</h2></div><div class="overview-controls"><span class="overview-range">Live</span><button id="overview-refresh" title="Refresh monitor">Refresh</button></div></header>
+    <div class="overview-stat-grid">
+      <article class="overview-stat panel-card"><span>Agents</span><strong id="overview-agent-count">?</strong><small>Configured specialists</small><div class="overview-agent-dots" id="overview-agent-dots"></div></article>
+      <article class="overview-stat panel-card"><span>Tasks</span><strong id="overview-task-count">?</strong><small id="overview-task-caption">Persisted in SQLite</small><div class="overview-task-bar" id="overview-task-bar"></div></article>
+      <article class="overview-stat panel-card"><span>Tool calls</span><strong id="overview-tool-count">?</strong><small>Recorded tool traces</small><svg class="overview-spark" viewBox="0 0 120 28" aria-hidden="true"><polyline id="overview-sparkline" points="0,25 120,25"/></svg></article>
+    </div>
+    <div class="overview-monitor-grid">
+      <article class="panel-card overview-traces"><header class="overview-card-heading"><div><h3>Recent traces</h3><small>Routing, retrieval, and tool activity</small></div><span id="overview-trace-count">0</span></header><div id="overview-trace-list" class="overview-trace-list"></div></article>
+      <article class="panel-card overview-task-card"><header class="overview-card-heading"><div><h3>Task status</h3><small>Current SQLite task totals</small></div></header><div class="overview-task-content"><div id="overview-task-ring" class="overview-task-ring"><strong id="overview-task-ring-total">0</strong><small>tasks</small></div><div id="overview-task-legend" class="overview-task-legend"></div></div></article>
+      <article class="panel-card overview-reasoning"><header class="overview-card-heading"><div><h3>Runtime decisions</h3><small>Latest recorded task trace</small></div></header><ol id="overview-reasoning-list" class="overview-reasoning-list"></ol></article>
+      <article class="panel-card overview-alerts"><header class="overview-card-heading"><div><h3>Runtime health</h3><small>Recent recorded issues</small></div></header><div id="overview-alert-list" class="overview-alert-list"></div></article>
+    </div>
+    <footer class="overview-footer"><span><i class="overview-health-dot"></i><span id="overview-db-status">Checking SQLite runtime</span></span><button id="welcome-open" class="overview-open-workspace">Open workspace</button></footer>
+  </section>
+</div>
+          </div>
+          <section class="bottom-panel">
+            <div id="bottom-resize" class="bottom-resize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal panel" tabindex="0" title="Drag or use arrow keys to resize terminal panel"></div>
+            <div class="panel-tabs" role="tablist" aria-label="Panel views"><button class="panel-tab selected" data-panel="terminal" role="tab" aria-selected="true">TERMINAL</button><button class="panel-tab" data-panel="activity" role="tab" aria-selected="false">AGENT ACTIVITY <span id="activity-count" class="count-pill">0</span></button><div class="panel-spacer"></div><button id="new-terminal" class="icon-button" title="New terminal" aria-label="New terminal">＋</button><button id="split-terminal" class="icon-button split-button" title="Split terminal" aria-label="Split terminal" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2" width="13" height="12" rx="1"/><path d="M8 2v12"/></svg></button><div class="terminal-menu-wrap"><button id="terminal-more" class="icon-button" title="Terminal actions" aria-label="Terminal actions" aria-expanded="false">···</button><div id="terminal-menu" class="terminal-menu hidden" role="menu"><button role="menuitem" data-terminal-action="new">New Terminal <kbd>Ctrl+Shift+`</kbd></button><button role="menuitem" data-terminal-action="split">Split Terminal <kbd>Ctrl+Shift+5</kbd></button><div class="menu-separator"></div><button role="menuitem" data-terminal-action="close">Kill Terminal</button><button role="menuitem" data-terminal-action="hide">Hide Panel</button></div></div><button id="toggle-bottom" class="icon-button" title="Toggle panel" aria-label="Toggle panel">⌄</button></div>
+            <div id="terminal-panel" class="terminal-panel"><div id="terminal-tabs" class="terminal-tabs" role="tablist"></div><div id="terminal-views" class="terminal-views"></div></div>
+            <div id="activity-panel" class="activity-panel hidden"></div>
+          </section>
+        </section>
+        <aside class="chat-panel">
+          <div class="chat-header"><div><div class="chat-title">Agent Chat</div><div class="chat-subtitle">Your workspace assistant</div></div><div class="chat-header-actions"><button id="toggle-chat-focus" class="icon-button" title="Open chat in workspace">⛶</button><button id="new-chat" class="icon-button" title="New conversation">＋</button></div></div>
+          <div class="chat-routing"><span class="online-dot"></span><span>Route with</span><span class="route-select-wrap"><select id="agent-select" aria-label="Select lead agent"></select><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></span><button id="manage-agents" class="icon-button compact" title="Manage agents" aria-label="Manage agents">♧</button></div>
+          <div id="chat-messages" class="chat-messages"></div>
+          <form id="chat-form" class="chat-composer">
+            <div id="composer-attachments" class="composer-attachments hidden" aria-label="Attached images"></div>
+            <textarea id="chat-input" rows="1" placeholder="Message your agent team…" aria-label="Message your agent team"></textarea>
+            <div class="composer-footer">
+              <div class="composer-tools">
+                <button id="composer-add" class="composer-add" type="button" title="Attach an image or add context" aria-label="Attach an image or add context" aria-expanded="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></button>
+                <div class="approval-control"><button id="composer-approval" class="composer-approval" type="button" title="Choose how agent actions are approved" aria-label="Approval mode: Approve for me" aria-haspopup="menu" aria-expanded="false" aria-controls="approval-menu"><svg class="approval-shield" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 16 5v4.8c0 3.4-2.5 6.1-6 7.7-3.5-1.6-6-4.3-6-7.7V5z"/><path d="m7.4 9.8 1.7 1.7 3.6-3.8"/></svg><span id="approval-mode-label" class="approval-mode-name">Approve for me</span><svg class="approval-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></button><div id="approval-menu" class="approval-menu hidden" role="menu" aria-label="Agent action approval"><div class="approval-menu-heading"><strong>How should Codex actions be approved?</strong><button id="approval-learn" type="button">Learn more</button></div><button class="approval-choice" type="button" role="menuitemradio" data-approval-mode="ask" aria-checked="false"><span class="approval-choice-icon ask-icon" aria-hidden="true">◉</span><span><strong>Ask for approval</strong><small>Review workspace changes and memory updates before they’re saved.</small></span><span class="approval-check"></span></button><button class="approval-choice" type="button" role="menuitemradio" data-approval-mode="approve" aria-checked="true"><span class="approval-choice-icon approve-icon" aria-hidden="true">✓</span><span><strong>Approve for me</strong><small>Allow workspace changes and memory updates without asking.</small></span><span class="approval-check"></span></button><button class="approval-choice full-access-choice" type="button" role="menuitemradio" data-approval-mode="full" aria-checked="false"><span class="approval-choice-icon full-icon" aria-hidden="true">!</span><span><strong>Full access</strong><small>Also allow shell commands and internet access.</small></span><span class="approval-check"></span></button></div></div>
+                <div id="composer-add-menu" class="composer-add-menu hidden" role="menu">
+                  <button type="button" role="menuitem" data-composer-action="image">Attach image…</button>
+                  <button type="button" role="menuitem" data-composer-action="selection">Add editor selection</button>
+                  <button type="button" role="menuitem" data-context="workspace">Insert workspace path</button>
+                  <button type="button" role="menuitem" data-context="file">Insert current file path</button>
+                  <button type="button" role="menuitemcheckbox" aria-checked="false" data-composer-action="plan">Plan mode <span class="menu-description">Create a plan before acting</span></button>
+                </div>
+                <input id="image-picker" class="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple aria-label="Choose images">
+                <button id="composer-think" class="composer-mode" type="button" title="Ask the model to think carefully before answering" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.1 1.2 1.8h4.8c.1-.7.5-1.3 1.2-1.8A6 6 0 0 0 10 2.5ZM7.8 17h4.4M8.4 19h3.2"/><path d="M10 5.5v4m0 2h.01"/></svg><span>Think</span></button>
+                <button id="composer-search" class="composer-mode" type="button" title="Search files in the open workspace" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.8" cy="8.8" r="5.8"/><path d="m13.2 13.2 4 4"/></svg><span>Search</span></button>
+                <span id="composer-plan-chip" class="composer-plan-chip hidden">Plan mode</span>
+              </div>
+              <div class="composer-actions"><button id="composer-model" class="composer-model" type="button" title="Model and thinking effort" aria-haspopup="dialog" aria-expanded="false" aria-controls="model-menu"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m8 1 1.4 5.1L14 8l-4.6 1.9L8 15l-1.4-5.1L2 8l4.6-1.9L8 1Z"/></svg><span id="composer-model-name">Local model</span><svg class="composer-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></button><div id="model-menu" class="model-menu hidden" role="dialog" aria-label="Model and thinking effort"><div class="model-menu-heading"><span>Model</span><button id="model-configure" type="button">Configure</button></div><strong id="model-menu-name"></strong><label>Provider<select id="active-provider"></select></label><label>Model<select id="active-model"></select></label><div class="model-effort"><div><label for="reasoning-effort">Thinking effort</label><output id="reasoning-effort-value">Medium</output></div><input id="reasoning-effort" type="range" min="0" max="2" step="1" value="1"><div class="effort-labels"><span>Low</span><span>Medium</span><span>High</span></div><small>Applied when Think is on.</small></div></div><button class="send-button" type="submit" title="Send message" aria-label="Send message"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15V5m-4 4 4-4 4 4"/></svg></button></div>
+            </div>
+          </form>
+          <div class="chat-footnote"><span class="online-dot"></span> Local orchestrator ready</div>
+        </aside>
+        <div id="chat-resize" class="resize-handle chat-resize" role="separator" aria-orientation="vertical" aria-label="Resize chat panel" aria-valuemin="280" aria-valuemax="620" tabindex="0" title="Drag or use arrow keys to resize chat"></div>
+      </main>
+      <div id="image-viewer" class="image-viewer hidden" role="dialog" aria-modal="true" aria-label="Image preview"><button id="image-viewer-close" class="image-viewer-close" type="button" aria-label="Close image preview">×</button><img id="image-viewer-image" alt="Attached image preview"></div>
+      <footer class="statusbar"><span><span class="status-dot"></span> Agent Workbench</span><span id="status-workspace">No workspace</span><span class="status-spacer"></span><span id="cursor-status"></span><span>Spaces: 2</span><span>UTF-8</span><span>LF</span><span id="editor-language">Plain Text</span><span>SQLite · Local</span></footer>
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

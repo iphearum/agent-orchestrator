@@ -1,0 +1,7 @@
+{
+  "name": "agent-workbench-desktop",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs"
+}
+

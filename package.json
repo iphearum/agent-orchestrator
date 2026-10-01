@@ -11,28 +11,52 @@
   "categories": ["Other", "AI", "Chat", "Programming Languages", "Machine Learning"],
   "activationEvents": [
     "onCommand:agentOrchestrator.open",
+    "onCommand:agentOrchestrator.openAgentChat",
     "onCommand:agentOrchestrator.runTask",
+    "onCommand:agentOrchestrator.manageAgents",
+    "onCommand:agentOrchestrator.configureProviderKey",
+    "onCommand:agentOrchestrator.configureN8nToken",
+    "onCommand:agentOrchestrator.configureSocketToken",
+    "onCommand:agentOrchestrator.configureLayaKey",
+    "onCommand:agentOrchestrator.testLaya",
+    "onCommand:agentOrchestrator.openSettings",
+    "onCommand:agentOrchestrator.openMonitor",
+    "onCommand:agentOrchestrator.openLatestTask",
+    "onCommand:agentOrchestrator.showExternalTools",
+    "onView:agentOrchestrator.agentChat",
+    "onWebviewPanel:agentOrchestrator.task",
+    "onWebviewPanel:agentOrchestrator.overview",
     "onChatParticipant:agentOrchestrator.chat"
   ],
   "main": "./dist/extension.js",
   "scripts": {
-    "compile": "tsc -p .",
+    "compile": "tsc -p . && bun run build:webview",
     "watch": "tsc -watch -p .",
+    "build:webview": "bun build webview-ui/src/main.tsx --target=browser --format=esm --production --entry-naming [name].[ext] --asset-naming [name].[ext] --outdir dist/webview",
+    "watch:webview": "bun run build:webview --watch",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p webview-ui",
+    "test": "bun test ./backend/src ./webview-ui/src",
     "postinstall": "node scripts/patch-node-pty.cjs",
-    "package": "vsce package",
-    "desktop:dev": "concurrently -k \"vite --config desktop/renderer/vite.config.mjs\" \"wait-on http://127.0.0.1:5173 && npm run compile && electron desktop/main.mjs\"",
-    "desktop:build": "npm run compile && vite build --config desktop/renderer/vite.config.mjs",
-    "desktop:start": "npm run desktop:build && electron desktop/main.mjs",
+    "package": "bun run compile && bunx --bun vsce package --no-dependencies --allow-missing-repository --skip-license",
+    "desktop:dev": "concurrently -k \"npm --prefix desktop/renderer-next run dev\" \"wait-on http://127.0.0.1:3000 && npm run compile && node desktop/start-electron.cjs --dev\"",
+    "agent-core": "cd agent-core && python -m uvicorn app.main:app --host 127.0.0.1 --port 8765",
+    "desktop:build": "npm run compile && npm --prefix desktop/renderer-next run build",
+    "desktop:start": "npm run desktop:build && node desktop/start-electron.cjs",
     "desktop:dist": "npm run desktop:build && electron-builder --config desktop/electron-builder.json"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "markdown-it": "^14.3.0",
     "monaco-editor": "^0.52.2",
-    "node-pty": "^1.1.0"
+    "node-pty": "^1.1.0",
+    "react": "^19",
+    "react-dom": "^19"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "@types/vscode": "^1.104.0",
     "@vscode/vsce": "^3.6.0",
     "concurrently": "^9.2.0",
@@ -49,8 +73,63 @@
         "title": "Agent Orchestrator: Open"
       },
       {
+        "command": "agentOrchestrator.openAgentChat",
+        "title": "Agent Orchestrator: Open Agentic",
+        "icon": "$(comment-discussion)"
+      },
+      {
         "command": "agentOrchestrator.runTask",
-        "title": "Agent Orchestrator: Run Task"
+        "title": "Agent Orchestrator: Run Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "agentOrchestrator.manageAgents",
+        "title": "Agent Orchestrator: Manage Agents",
+        "icon": "$(organization)"
+      },
+      {
+        "command": "agentOrchestrator.configureProviderKey",
+        "title": "Agent Orchestrator: Configure Provider API Key"
+      },
+      {
+        "command": "agentOrchestrator.configureN8nToken",
+        "title": "Agent Orchestrator: Configure n8n Token"
+      },
+      {
+        "command": "agentOrchestrator.configureSocketToken",
+        "title": "Agent Orchestrator: Configure Socket Token"
+      },
+      {
+        "command": "agentOrchestrator.configureLayaKey",
+        "title": "Agent Orchestrator: Configure Laya API Key"
+      },
+      {
+        "command": "agentOrchestrator.resumeLaya",
+        "title": "Agent Orchestrator: Resume Laya"
+      },
+      {
+        "command": "agentOrchestrator.testLaya",
+        "title": "Agent Orchestrator: Test Laya Connection"
+      },
+      {
+        "command": "agentOrchestrator.openSettings",
+        "title": "Agent Orchestrator: Open Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "agentOrchestrator.openMonitor",
+        "title": "Agent Orchestrator: Open Overview",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "agentOrchestrator.showExternalTools",
+        "title": "Agent Orchestrator: Show External Tools (MCP)",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "agentOrchestrator.openLatestTask",
+        "title": "Agent Orchestrator: Open Latest Task",
+        "icon": "$(tasklist)"
       }
     ],
     "chatParticipants": [
@@ -66,7 +145,14 @@
       "activitybar": [
         {
           "id": "agentOrchestrator",
-          "title": "Agents",
+          "title": "Agent Orchestration",
+          "icon": "media/agents.svg"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "agentOrchestratorChat",
+          "title": "Agentic",
           "icon": "media/agents.svg"
         }
       ]
@@ -74,14 +160,64 @@
     "views": {
       "agentOrchestrator": [
         {
-          "id": "agentOrchestrator.agents",
-          "name": "Agents"
+          "id": "agentOrchestrator.sidebar",
+          "name": "Agent Orchestration",
+          "type": "webview"
+        }
+      ],
+      "agentOrchestratorChat": [
+        {
+          "id": "agentOrchestrator.agentChat",
+          "name": "Agentic",
+          "type": "webview",
+          "icon": "media/agents.svg"
         }
       ]
     },
     "configuration": {
       "title": "Agent Orchestrator",
       "properties": {
+        "agentOrchestrator.externalTools.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Let agents use tools registered in VS Code, such as MCP servers configured with “MCP: Add Server”. Agents see only a few relevant tools at a time and can search for more with find_tools."
+        },
+        "agentOrchestrator.externalTools.toolPatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["mcp_*"],
+          "markdownDescription": "Which registered tools count as agent tools (`*` is a wildcard). The default takes MCP server tools only. Run **Agent Orchestrator: Show External Tools** to see real tool names."
+        },
+        "agentOrchestrator.externalTools.agentTools": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } },
+          "default": { "*": ["*"] },
+          "markdownDescription": "Which external tools each agent may use: agent id (or `*` for the rest) → tool name patterns. Example: `{ \"devops\": [\"mcp_github_*\", \"mcp_kubernetes_*\"], \"researcher\": [\"mcp_fetch_*\"], \"*\": [] }`."
+        },
+        "agentOrchestrator.externalTools.autoApprove": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "markdownDescription": "External tools that may run without asking, e.g. read-only ones like `mcp_github_get_*`. All others need approval unless the chat is in Full access mode."
+        },
+        "agentOrchestrator.cliAgents": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Coding-agent CLIs that can run an agent's whole task. Assign one to an agent under **Manage agents → Agent runtime**. Presets: `claude-code` (Claude Code) and `codex` (OpenAI Codex CLI); `custom` runs `command` with `args` (`{prompt}` is replaced by the task). They use their own tools and permissions; the chat's approval mode maps to their safest matching setting (Ask → read-only/plan, Approve for me → may edit files, Full access → no safeguards).",
+          "items": {
+            "type": "object",
+            "required": ["id", "name"],
+            "properties": {
+              "id": { "type": "string", "description": "Stable id assigned to agents." },
+              "name": { "type": "string" },
+              "preset": { "type": "string", "enum": ["claude-code", "codex", "custom"], "default": "custom" },
+              "command": { "type": "string", "description": "Executable to run. Presets default to claude / codex." },
+              "args": { "type": "array", "items": { "type": "string" }, "description": "Custom args; {prompt} is replaced by the task, otherwise the task is appended." },
+              "output": { "type": "string", "enum": ["text", "claude-stream-json"], "default": "text" },
+              "timeoutMs": { "type": "number", "default": 900000 }
+            }
+          }
+        },
         "agentOrchestrator.baseUrl": {
           "type": "string",
           "default": "http://localhost:11434/v1",
@@ -100,7 +236,38 @@
         "agentOrchestrator.providers": {
           "type": "array",
           "default": [],
-          "description": "Named model providers. Each entry has id, name, baseUrl, apiKey, models, model, and optional protocol (openai or anthropic)."
+          "description": "Named model connections. API keys are stored separately in VS Code Secret Storage using the Configure Provider API Key command.",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "baseUrl"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable provider identifier assigned to agents."
+              },
+              "name": {
+                "type": "string"
+              },
+              "protocol": {
+                "type": "string",
+                "enum": ["openai", "anthropic"],
+                "default": "openai"
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model": {
+                "type": "string",
+                "description": "Default model for this provider."
+              }
+            }
+          }
         },
         "agentOrchestrator.activeProviderId": {
           "type": "string",
@@ -111,6 +278,105 @@
           "type": "string",
           "default": "",
           "description": "Model to use on the active provider."
+        },
+        "agentOrchestrator.n8nLinks": {
+          "type": "array",
+          "default": [],
+          "description": "n8n agent webhook connections. Tokens are stored separately in VS Code Secret Storage using the Configure n8n Token command.",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "webhookUrl"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable connection identifier assigned to agents."
+              },
+              "name": {
+                "type": "string"
+              },
+              "webhookUrl": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          }
+        },
+        "agentOrchestrator.socketLinks": {
+          "type": "array",
+          "default": [],
+          "description": "Persistent WebSocket agent runtimes. The server must implement the Agent Orchestrator JSON request/response protocol documented in README.md. Tokens are stored separately in VS Code Secret Storage.",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "url"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable connection identifier assigned to agents."
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Use wss://, or ws:// for localhost."
+              }
+            }
+          }
+        },
+        "agentOrchestrator.maxConcurrentTasks": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 16,
+          "description": "Maximum root agent tasks to run concurrently."
+        },
+        "agentOrchestrator.layaEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use the configured Laya SystemOne API for routing and selective tool/retrieval decisions. When no endpoint is available, the fallback mode applies."
+        },
+        "agentOrchestrator.layaEndpoint": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Laya endpoint, e.g. `https://your-laya-host/v1/systemone` (plain HTTP is allowed only for localhost).\n\n**API key:** [Set the Laya API key](command:agentOrchestrator.configureLayaKey) — it is sent as a Bearer token and kept in VS Code Secret Storage, not in settings.json. Then [test the connection](command:agentOrchestrator.testLaya)."
+        },
+        "agentOrchestrator.layaRetryMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "maximum": 120,
+          "markdownDescription": "Laya is paused after 3 slow or failed requests in a row (or at once for a rejected key or bad URL), and decisions then use the fallback. While paused, one small background request is sent every this many minutes; Laya resumes when it answers. `0` = stay paused until you resume it (**Agent Orchestrator: Resume Laya** or click the status bar item)."
+        },
+        "agentOrchestrator.layaModel": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Laya model sent with each decision request, e.g. `laya-multilingual`. Leave empty for services that serve a single model."
+        },
+        "agentOrchestrator.layaKeepAlive": {
+          "type": "string",
+          "default": "30m",
+          "markdownDescription": "Sent as `keep_alive` with each Laya request: how long an Ollama-style server keeps the Laya model loaded after answering, e.g. `30m`, `2h`, or `-1` for as long as the server runs. Loading the model takes 10-30 s on a CPU; a request that may find it unloaded gets 30 s instead of the normal timeout. Leave empty for servers that don't accept the field."
+        },
+        "agentOrchestrator.layaTimeoutMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 100,
+          "maximum": 60000,
+          "markdownDescription": "Maximum time allowed for each Laya decision request, in milliseconds. A request that takes longer falls back for that decision only. When the model may have been unloaded (first request, after a failure, or idle past `layaKeepAlive`), the request is allowed 30 s so the model can load. [Test the connection](command:agentOrchestrator.testLaya) to see how long yours take."
+        },
+        "agentOrchestrator.layaFallbackMode": {
+          "type": "string",
+          "enum": ["none", "rules"],
+          "default": "none",
+          "description": "Behavior when Laya is disabled, unconfigured, or unreachable. none keeps the configured lead agent and skips optional retrieval; rules uses the local deterministic fallback."
+        },
+        "agentOrchestrator.maxAgentRunsPerRequest": {
+          "type": "number",
+          "default": 12,
+          "minimum": 1,
+          "maximum": 50,
+          "markdownDescription": "Most agent runs one request may start through hand-offs and teams (`ask_agent`, `delegate_task`, `delegate_team`), counting every level. Agents choose who to involve; this keeps a team from fanning out without end."
         },
         "agentOrchestrator.maxDelegationDepth": {
           "type": "number",
@@ -124,17 +390,25 @@
           "minimum": 1,
           "maximum": 50
         },
-        "agentOrchestrator.layaEnabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable shared per-agent decision policies."
-        },
         "agentOrchestrator.contextRecentMessages": {
           "type": "number",
           "default": 6,
           "minimum": 1,
           "maximum": 30,
           "description": "Maximum recent messages included in compact agent context."
+        },
+        "agentOrchestrator.contextMaxTokens": {
+          "type": "number",
+          "default": 12000,
+          "minimum": 1000,
+          "maximum": 100000,
+          "description": "Approximate maximum context budget for recent messages, retrieved memories and graph facts."
+        },
+        "agentOrchestrator.approvalMode": {
+          "type": "string",
+          "enum": ["ask", "approve", "full"],
+          "default": "ask",
+          "description": "ask prompts before workspace writes and persistent memory changes; approve allows those workspace-scoped changes automatically; full also exposes shell commands with current-user permissions, started in the workspace directory."
         },
         "agentOrchestrator.automaticExecutionConfidence": {
           "type": "number",
@@ -150,5 +424,24 @@
         }
       }
     }
+  },
+  "menus": {
+    "view/title": [
+      {
+        "command": "agentOrchestrator.runTask",
+        "when": "view == agentOrchestrator.sidebar",
+        "group": "navigation@1"
+      },
+      {
+        "command": "agentOrchestrator.openMonitor",
+        "when": "view == agentOrchestrator.sidebar",
+        "group": "navigation@2"
+      },
+      {
+        "command": "agentOrchestrator.openSettings",
+        "when": "view == agentOrchestrator.sidebar",
+        "group": "navigation@3"
+      }
+    ]
   }
 }

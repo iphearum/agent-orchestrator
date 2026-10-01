@@ -1,0 +1,99 @@
+/*
+ * Desktop shell around the extension's React surfaces. Colours come from the same --wb-* tokens
+ * (webview-ui/src/styles.css), whose fallbacks are Dark Modern. Light mode supplies the
+ * --vscode-* values VS Code would inject for Light Modern (same list as webview-ui/dev.html).
+ */
+html[data-color-theme="light"] {
+  --vscode-editor-background: #fff; --vscode-sideBar-background: #f8f8f8; --vscode-editorWidget-background: #f8f8f8;
+  --vscode-list-hoverBackground: #f2f2f2; --vscode-panel-border: #e5e5e5; --vscode-input-border: #cecece;
+  --vscode-foreground: #3b3b3b; --vscode-editor-foreground: #1f1f1f; --vscode-descriptionForeground: #717171;
+  --vscode-button-background: #005fb8; --vscode-button-hoverBackground: #0258a8; --vscode-button-secondaryBackground: #e5e5e5;
+  --vscode-button-secondaryForeground: #3b3b3b; --vscode-list-activeSelectionBackground: #e8e8e8; --vscode-list-activeSelectionForeground: #000;
+  --vscode-focusBorder: #005fb8; --vscode-input-background: #fff; --vscode-badge-background: #cccedb; --vscode-badge-foreground: #3b3b3b;
+  --vscode-testing-iconPassed: #388a34; --vscode-editorIndentGuide-background1: #d3d3d3; --vscode-textLink-foreground: #005fb8;
+  --vscode-charts-green: #388a34; --vscode-charts-blue: #1a85ff; --vscode-charts-purple: #652d90;
+  --desk-chrome: #f8f8f8; --desk-activity-fg: #616161; --desk-status: #f8f8f8; --desk-status-fg: #3b3b3b;
+  color-scheme: light;
+}
+:root {
+  --desk-chrome: #181818;
+  --desk-activity-fg: #868686;
+  --desk-status: #181818;
+  --desk-status-fg: #cccccc;
+}
+html[data-color-theme="dark"] { color-scheme: dark; }
+
+.desk-shell { height: 100dvh; display: grid; grid-template-rows: 38px minmax(0, 1fr) 22px; background: var(--wb-canvas); color: var(--wb-text); }
+.desk-body { min-height: 0; display: grid; grid-template-columns: 48px clamp(220px, 20vw, 300px) minmax(0, 1fr); }
+
+/* Title bar: 38px to match the titleBarOverlay in desktop/main.mjs, which draws the Windows/Linux caption buttons on the right. */
+.desk-titlebar { position: relative; display: flex; align-items: center; gap: 8px; padding: 0 140px 0 12px; background: var(--desk-chrome); border-bottom: 1px solid var(--wb-border); -webkit-app-region: drag; user-select: none; }
+html[data-platform="darwin"] .desk-titlebar { padding-right: 0; }
+.desk-title-mark { display: grid; place-items: center; color: var(--wb-accent); }
+.desk-title-name { font-size: 12px; color: var(--wb-muted); white-space: nowrap; }
+.desk-command-center { position: absolute; left: 50%; transform: translateX(-50%); width: min(420px, 38vw); height: 24px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--wb-border-strong); border-radius: 6px; background: var(--wb-surface); color: var(--wb-muted); font-size: 12px; cursor: pointer; -webkit-app-region: no-drag; }
+.desk-command-center:hover { background: var(--wb-raised); color: var(--wb-text); }
+.desk-command-center span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk-window-controls { display: none; margin-left: auto; height: 100%; -webkit-app-region: no-drag; }
+html[data-platform="darwin"] .desk-window-controls { display: flex; }
+.desk-window-controls button { width: 46px; height: 100%; display: grid; place-items: center; border: 0; background: transparent; color: var(--wb-text); cursor: pointer; }
+.desk-window-controls button:hover { background: var(--wb-raised); }
+.desk-window-controls button.close:hover { background: #c42b1c; color: #fff; }
+.desk-window-controls svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1; }
+
+/* Activity bar */
+.desk-activity { display: flex; flex-direction: column; background: var(--desk-chrome); border-right: 1px solid var(--wb-border); }
+.desk-activity button { position: relative; height: 48px; display: grid; place-items: center; border: 0; background: transparent; color: var(--desk-activity-fg); cursor: pointer; }
+.desk-activity button:hover, .desk-activity button.selected { color: var(--wb-text-strong); }
+.desk-activity button.selected::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--wb-accent); }
+.desk-activity button:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: -1px; }
+.desk-activity-fill { flex: 1; }
+
+/* Side bar: VS Code's view title, then the extension's sidebar webview content. */
+.desk-sidebar { min-height: 0; display: grid; grid-template-rows: 35px minmax(0, 1fr); background: var(--wb-sidebar); border-right: 1px solid var(--wb-border); }
+.desk-view-title { display: flex; align-items: center; gap: 2px; padding: 0 8px 0 20px; font-size: 11px; font-weight: 400; text-transform: uppercase; color: var(--wb-text); }
+.desk-view-title > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk-sidebar-body { min-height: 0; }
+
+/* Editor area: tab strip + the Overview or a task panel. */
+.desk-editor { min-width: 0; min-height: 0; display: grid; grid-template-rows: 35px minmax(0, 1fr); }
+.desk-tabs { display: flex; min-width: 0; overflow-x: auto; overflow-y: hidden; background: var(--desk-chrome); border-bottom: 1px solid var(--wb-border); scrollbar-width: none; }
+.desk-tab { flex: none; display: flex; align-items: center; max-width: 220px; border-right: 1px solid var(--wb-border); color: var(--wb-muted); }
+.desk-tab.active { background: var(--wb-canvas); color: var(--wb-text-strong); box-shadow: inset 0 1px 0 var(--wb-accent); margin-bottom: -1px; }
+.desk-tab-label { min-width: 0; height: 100%; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 12px; border: 0; background: transparent; color: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desk-tab-label:only-child { padding-right: 14px; }
+.desk-tab-close { width: 22px; height: 22px; margin-right: 6px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; opacity: 0; }
+.desk-tab.active .desk-tab-close, .desk-tab:hover .desk-tab-close, .desk-tab-close:focus-visible { opacity: 1; }
+.desk-tab-close:hover { background: var(--wb-raised); }
+.desk-tab-label:focus-visible, .desk-tab-close:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: -1px; }
+.desk-view { min-width: 0; min-height: 0; overflow: hidden; }
+/* The shared surfaces size themselves to a whole webview (100vh); here they fill the editor area. */
+.desk-view > .task-app, .desk-view > .overview, .desk-sidebar-body > .sidebar { height: 100%; }
+
+/* Status bar, like the extension's four native items. */
+.desk-statusbar { display: flex; align-items: center; min-width: 0; padding: 0 6px; background: var(--desk-status); color: var(--desk-status-fg); border-top: 1px solid var(--wb-border); font-size: 12px; white-space: nowrap; overflow: hidden; }
+.desk-status-item { display: inline-flex; align-items: center; gap: 4px; height: 100%; padding: 0 7px; border: 0; background: transparent; color: inherit; font: inherit; }
+button.desk-status-item { cursor: pointer; }
+button.desk-status-item:hover { background: var(--wb-raised); }
+.desk-status-item.warn { color: var(--wb-warning); }
+.desk-status-fill { flex: 1; }
+
+/* Dialogs and toast */
+.desk-modal-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: start center; padding-top: 12vh; background: rgb(0 0 0 / .35); }
+.desk-modal { width: min(560px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 16px; border: 1px solid var(--wb-border-strong); border-radius: 8px; background: var(--wb-surface); color: var(--wb-text); box-shadow: 0 10px 30px rgb(0 0 0 / .35); }
+.desk-modal.wide { width: min(820px, calc(100vw - 32px)); }
+.desk-modal h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--wb-text-strong); }
+.desk-modal p { margin: 0; }
+.desk-modal textarea { width: 100%; resize: vertical; min-height: 96px; padding: 8px; border: 1px solid var(--wb-border-strong); border-radius: 4px; background: var(--wb-input); color: var(--wb-text); font: inherit; }
+.desk-modal textarea:focus { outline: 1px solid var(--wb-focus); outline-offset: -1px; }
+.desk-modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.desk-modal-actions > :first-child { margin-right: auto; }
+.desk-json { max-height: 60vh; overflow: auto; margin: 0; padding: 10px; border-radius: 4px; background: var(--wb-canvas); font-family: var(--wb-mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.desk-toast { position: fixed; left: 50%; bottom: 36px; z-index: 50; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); padding: 8px 14px; border: 1px solid var(--wb-border-strong); border-radius: 6px; background: var(--wb-surface); color: var(--wb-text); box-shadow: 0 6px 20px rgb(0 0 0 / .3); }
+
+@media (max-width: 760px) {
+  .desk-body { grid-template-columns: 42px minmax(0, 1fr); }
+  .desk-sidebar { display: none; }
+  .desk-title-name { display: none; }
+  .desk-statusbar .desk-status-item:nth-child(n+4) { display: none; }
+}

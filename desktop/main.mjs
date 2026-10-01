@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
+﻿import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { exec } from "node:child_process";
 import { spawn as spawnPty } from "node-pty";
 import { createRequire } from "node:module";
@@ -8,18 +8,32 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { AgentDatabase } = require("../dist/database.js");
-const { OpenAICompatibleModel } = require("../dist/model.js");
-const { Orchestrator } = require("../dist/orchestrator.js");
+const { AgentDatabase } = require("../dist/persistence/database.js");
+const { OpenAICompatibleModel } = require("../dist/core/model.js");
+const { Orchestrator } = require("../dist/core/orchestrator.js");
+const { RuntimeActivity } = require("../dist/core/activity.js");
+const { WorkbenchViews } = require("../dist/vscode/webviews/views.js");
+const { LayaHttpClient } = require("../dist/integrations/layaClient.js");
+const { AgentDecisionEngine } = require("../dist/core/decision.js");
 const here = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
 let window;
 let workspaceRoot = app.getPath("documents");
 const terminals = new Map();
 const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
-let settings = { baseUrl: "http://localhost:11434/v1", apiKey: "local", model: "qwen3:8b", providers: [], activeProviderId: "", activeModel: "", reasoningEffort: "medium", approvalMode: "approve", layaEnabled: true, maxDelegationDepth: 3, maxDelegationsPerTask: 8, contextRecentMessages: 6 };
+let settings = { baseUrl: "http://localhost:11434/v1", apiKey: "local", model: "qwen3:8b", providers: [], activeProviderId: "", activeModel: "", reasoningEffort: "medium", approvalMode: "approve", layaEnabled: true, layaEndpoint: "", layaModel: "", layaApiKey: "", layaTimeoutMs: 1500, layaFallbackMode: "none", maxDelegationDepth: 3, maxDelegationsPerTask: 8, contextRecentMessages: 6 };
 let database;
 let model;
+/** Live agent state for the workbench views, fed by orchestrator events (same as the extension). */
+const activity = new RuntimeActivity();
+let views;
+/** One shared Laya runtime for every agent and request, as in the extension. */
+const laya = new LayaHttpClient(() => ({
+  endpoint: String(settings.layaEndpoint || ""),
+  model: String(settings.layaModel || ""),
+  apiKey: settings.layaApiKey ? String(settings.layaApiKey) : undefined,
+  timeoutMs: Number(settings.layaTimeoutMs) || 1500
+}));
 
 async function loadSettings() {
   try { settings = { ...settings, ...JSON.parse(await fs.readFile(settingsPath(), "utf8")) }; } catch { /* first launch */ }
@@ -55,9 +69,9 @@ function createWindow() {
   window.removeMenu();
   window.setMenuBarVisibility(false);
   window.autoHideMenuBar = true;
-  const devUrl = process.env.VITE_DEV_SERVER_URL || (!app.isPackaged ? "http://127.0.0.1:5173" : null);
+  const devUrl = process.env.NEXT_DEV_SERVER_URL;
   if (devUrl) window.loadURL(devUrl);
-  else window.loadFile(path.join(here, "renderer", "dist", "index.html"));
+  else window.loadFile(path.join(here, "renderer-next", "out", "index.html"));
   window.on("closed", () => { window = undefined; });
 }
 
@@ -93,6 +107,8 @@ async function searchWorkspace(query, options = {}) {
   const stopWords = new Set(["about", "after", "also", "and", "are", "can", "find", "for", "from", "help", "into", "that", "the", "this", "with", "you"]);
   const caseSensitive = Boolean(options.caseSensitive);
   const wholeWord = Boolean(options.wholeWord);
+  const globText = String(options.glob || "**/*").replaceAll("\\", "/");
+  const globRegex = new RegExp(`^${globText.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**/", "§").replaceAll("**", "¤").replaceAll("*", "[^/]*").replaceAll("?", "[^/]").replaceAll("§", "(?:.*/)?").replaceAll("¤", ".*")}$`);
   const rawTerms = String(query || "").match(/[a-z0-9_./-]{2,}/gi) || [];
   const terms = [...new Set(rawTerms.map(term => caseSensitive ? term : term.toLowerCase()))].filter(term => !stopWords.has(term.toLowerCase())).slice(0, 8);
   if (!terms.length) return { terms: [], results: [] };
@@ -111,7 +127,8 @@ async function searchWorkspace(query, options = {}) {
         if (searchSkipDirectories.has(entry.name)) continue;
         await walk(target, depth + 1);
       } else if (entry.isFile() && searchableExtensions.has(path.extname(entry.name).toLowerCase())) {
-        candidates.push(target);
+        const relative = path.relative(workspaceRoot, target).split(path.sep).join("/");
+        if (globRegex.test(relative)) candidates.push(target);
       }
     }
   };
@@ -170,6 +187,13 @@ app.whenReady().then(async () => {
   database = new AgentDatabase(path.join(app.getPath("userData"), "agent-data"));
   database.seedAgents();
   model = new OpenAICompatibleModel(() => settings);
+  views = new WorkbenchViews(database, activity, {
+    layaEnabled: () => settings.layaEnabled !== false,
+    layaEndpoint: () => String(settings.layaEndpoint || ""),
+    layaStatus: () => laya.status,
+    workspaces: () => [{ key: workspaceRoot, name: path.basename(workspaceRoot) || workspaceRoot }]
+  });
+  activity.onDidChange(change => notifyWorkbench(change.rootTaskId ? [change.rootTaskId] : undefined));
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
@@ -178,6 +202,7 @@ ipcMain.handle("workspace:open", async () => {
   const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] });
   if (result.canceled || !result.filePaths[0]) return { root: workspaceRoot };
   workspaceRoot = result.filePaths[0];
+  notifyWorkbench();
   for (const [id, terminal] of terminals) startTerminal(id, { cols: terminal.cols, rows: terminal.rows });
   return { root: workspaceRoot, entries: await listFiles(".") };
 });
@@ -206,12 +231,68 @@ async function listFiles(relativePath) {
   return entries.filter(item => ![".git", "node_modules", "dist", ".codex"].includes(item.name)).sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name)).map(item => ({ ...publicEntry(root, item), path: path.join(relativePath || ".", item.name).split(path.sep).join("/") }));
 }
 
+/** Tell the workbench views to refetch; bursts of runtime events are coalesced into one push. */
+let pendingChange;
+function notifyWorkbench(taskIds) {
+  if (pendingChange) {
+    pendingChange.taskIds = pendingChange.taskIds && taskIds ? [...new Set([...pendingChange.taskIds, ...taskIds])] : undefined;
+    return;
+  }
+  pendingChange = { taskIds };
+  setTimeout(() => {
+    const { taskIds: ids } = pendingChange;
+    pendingChange = undefined;
+    send("workbench:changed", { scopes: ["agents", "tasks", "health", "conversations"], ...(ids ? { taskIds: ids } : {}) });
+  }, 150);
+}
+
+/** The data half of the extension's webview protocol (backend/src/shared/protocol.ts); ui.* methods are handled in the renderer. */
+ipcMain.handle("workbench:rpc", (_event, method, params) => {
+  const taskId = () => {
+    const value = params?.taskId;
+    if (typeof value !== "string" || !value || value.length > 200) throw new Error('Missing or invalid "taskId".');
+    return value;
+  };
+  switch (method) {
+    case "sidebar.get": return views.sidebar();
+    case "overview.get": return views.overview();
+    case "task.get": {
+      const bundle = views.task(taskId());
+      if (!bundle) throw new Error("This task no longer exists.");
+      return bundle;
+    }
+    case "task.latest": return { taskId: views.latestTaskId() };
+    case "task.update": {
+      if (params.description !== undefined && (typeof params.description !== "string" || params.description.length > 20_000)) throw new Error("Invalid description.");
+      if (params.status !== undefined && params.status !== "completed" && params.status !== "cancelled") throw new Error("Invalid status.");
+      const id = taskId();
+      const task = views.updateTask(id, { description: params.description, status: params.status });
+      notifyWorkbench([id]);
+      return task;
+    }
+    case "toolRun.get": {
+      const run = views.repo.toolRun(String(params?.toolRunId || ""));
+      if (!run) throw new Error("Tool run not found.");
+      const parse = text => { try { return JSON.parse(text ?? "null"); } catch { return text; } };
+      return { tool: run.tool_name, status: run.status, agent: run.agent_id, at: run.created_at, arguments: parse(run.arguments_json), result: parse(run.result_json) };
+    }
+    default: throw new Error(`Unknown method ${String(method)}.`);
+  }
+});
+
 ipcMain.handle("agents:list", () => database.listAgents());
-ipcMain.handle("agents:save", (_event, agent) => { database.upsertAgent(agent); return database.listAgents(); });
-ipcMain.handle("agents:delete", (_event, agentId) => { database.deleteAgent(agentId); return database.listAgents(); });
+ipcMain.handle("monitor:snapshot", () => database.monitorSnapshot());
+ipcMain.handle("agents:save", (_event, agent) => { database.upsertAgent(agent); notifyWorkbench(); return database.listAgents(); });
+ipcMain.handle("agents:delete", (_event, agentId) => { database.deleteAgent(agentId); notifyWorkbench(); return database.listAgents(); });
 ipcMain.handle("settings:get", () => ({ ...settings }));
 ipcMain.handle("settings:save", async (_event, next) => {
   settings = { ...settings, ...next, approvalMode: settings.approvalMode };
+  settings.layaEnabled = settings.layaEnabled !== false;
+  settings.layaEndpoint = String(settings.layaEndpoint || "").trim();
+  settings.layaModel = String(settings.layaModel || "").trim();
+  settings.layaApiKey = String(settings.layaApiKey || "");
+  settings.layaTimeoutMs = Math.max(100, Math.min(60_000, Number(settings.layaTimeoutMs) || 1500));
+  settings.layaFallbackMode = settings.layaFallbackMode === "rules" ? "rules" : "none";
   if (Array.isArray(next.providers)) settings.providers = next.providers.filter(provider => provider && provider.id && provider.name && provider.baseUrl).map(provider => ({
     id: String(provider.id), name: String(provider.name), protocol: provider.protocol === "anthropic" ? "anthropic" : "openai",
     baseUrl: String(provider.baseUrl).replace(/\/$/, ""), apiKey: String(provider.apiKey || ""),
@@ -229,7 +310,19 @@ ipcMain.handle("settings:save", async (_event, next) => {
     settings.apiKey = active.apiKey;
   }
   await fs.writeFile(settingsPath(), JSON.stringify(settings, null, 2), "utf8");
+  notifyWorkbench();
   return settings;
+});
+/** Settings → Test connection and the Laya status bar item: one real decision request. */
+ipcMain.handle("laya:test", async () => {
+  try {
+    const result = await laya.ping();
+    return { ok: true, model: settings.layaModel || undefined, needsLlm: result.needsLlm };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  } finally {
+    notifyWorkbench();
+  }
 });
 ipcMain.handle("settings:approval-mode", async (_event, requestedMode) => {
   const mode = ["ask", "approve", "full"].includes(requestedMode) ? requestedMode : "approve";
@@ -285,8 +378,35 @@ async function runFullAccessCommand(command) {
     return JSON.stringify({ exitCode: error.code ?? null, signal: error.signal ?? null, timedOut: Boolean(error.killed), stdout: clip(error.stdout), stderr: clip(error.stderr || error.message) });
   }
 }
+const desktopWorkspaceTools = {
+  async execute(name, args = {}) {
+    try {
+      if (name === "search_workspace") return JSON.stringify(await searchWorkspace(String(args.query || ""), { glob: String(args.glob || "**/*") }));
+      const relativePath = String(args.path || "");
+      if (name === "read_file") {
+        const target = await safeWorkspacePath(relativePath);
+        const stat = await fs.stat(target);
+        if (stat.size > 200_000) return JSON.stringify({ error: "File is larger than 200 KB. Search for a relevant section instead." });
+        return await fs.readFile(target, "utf8");
+      }
+      if (name === "write_file") {
+        const target = await safeWorkspacePath(relativePath, true);
+        const content = String(args.content ?? "");
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        await fs.writeFile(target, content, "utf8");
+        return JSON.stringify({ ok: true, path: path.relative(workspaceRoot, target).split(path.sep).join("/"), bytesWritten: Buffer.byteLength(content, "utf8") });
+      }
+      return JSON.stringify({ error: `Unknown workspace tool '${name}'.` });
+    } catch (error) { return JSON.stringify({ error: error instanceof Error ? error.message : String(error) }); }
+  }
+};
 ipcMain.handle("chat:run", async (_event, request) => {
-  const orchestrator = new Orchestrator(database, model, event => send("agent:event", event), undefined, settings, requestToolApproval, runFullAccessCommand);
+  let rootTaskId;
+  const orchestrator = new Orchestrator(database, model, event => {
+    rootTaskId ??= event.rootTaskId;
+    activity.handle(event);
+    send("agent:event", event);
+  }, new AgentDecisionEngine(undefined, settings.layaEnabled !== false ? laya : undefined, settings.layaFallbackMode === "rules" ? "rules" : "none"), settings, requestToolApproval, runFullAccessCommand, undefined, undefined, undefined, desktopWorkspaceTools);
   const images = validateChatImages(request.images);
   try {
     return await orchestrator.runRoot(request.prompt, request.agentId || "lead", false, {
@@ -307,6 +427,9 @@ ipcMain.handle("chat:run", async (_event, request) => {
       throw new Error("Can't reach the configured model provider. Start the model service, then check the URL and API key in Settings → Model provider.");
     }
     throw error;
+  } finally {
+    // A missed result/error event must not leave the task "running" in the workbench.
+    if (rootTaskId) activity.finishRoot(rootTaskId);
   }
 });
 

@@ -7,8 +7,15 @@
   "files": [
     "desktop/main.mjs",
     "desktop/preload.cjs",
-    "desktop/renderer/dist/**/*",
-    "dist/**/*"
+    "desktop/renderer-next/out/**/*",
+    "dist/**/*",
+    "!dist/**/*.map",
+    "!dist/webview{,/**/*}",
+    "!**/node_modules/monaco-editor{,/**/*}",
+    "!**/node_modules/@xterm{,/**/*}",
+    "!**/node_modules/markdown-it{,/**/*}",
+    "!**/node_modules/react{,/**/*}",
+    "!**/node_modules/react-dom{,/**/*}"
   ],
   "extraMetadata": {
     "main": "desktop/main.mjs"

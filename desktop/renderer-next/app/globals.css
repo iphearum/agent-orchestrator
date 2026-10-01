@@ -1,0 +1,41 @@
+﻿@import "tailwindcss";
+@source "../app/**/*.{js,jsx,ts,tsx}";
+@source "../components/**/*.{js,jsx,ts,tsx}";
+@source "../features/**/*.{js,jsx,ts,tsx}";
+@source "../lib/**/*.{js,jsx,ts,tsx}";
+@source "../../../frontend/templates/**/*.html";
+
+@theme {
+  --color-canvas: #1e1e1e;
+  --color-sidebar: #181818;
+  --color-surface: #1f1f1f;
+  --color-surface-raised: #252526;
+  --color-border: #2b2b2b;
+  --color-border-strong: #3c3c3c;
+  --color-text: #cccccc;
+  --color-text-strong: #e7e7e7;
+  --color-muted: #9d9d9d;
+  --color-accent: #0078d4;
+  --color-accent-hover: #026ec1;
+  --color-accent-soft: #04395e;
+  --color-success: #3fb950;
+  --color-warning: #d29922;
+  --color-danger: #f85149;
+  --color-diff-add: rgb(46 160 67 / .22);
+  --color-diff-del: rgb(248 81 73 / .22);
+  --color-grid-dot: #2a2a2a;
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.editor-return { position: fixed; z-index: 20; top: 7px; right: 215px; padding: 4px 8px; border: 1px solid var(--border-strong, var(--color-border-strong)); border-radius: 3px; background: var(--surface, var(--color-surface)); color: var(--text, var(--color-text)) !important; text-decoration: none; font-size: 10px; }
