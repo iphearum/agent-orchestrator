@@ -1,5 +1,51 @@
 # Progress
 
+2026-10-01 14:43 +07 [agent-icons-install] Packaged and installed the robot icon update successfully; reload the VS Code window to apply it.
+
+2026-10-01 14:42 +07 [agent-icons] Replaced the welcome sparkle and letter avatars with theme-aware robot marks inspired by the supplied bot references; light/dark/high-contrast and narrow renders checked.
+
+2026-10-01 14:30 +07 [supervisor-advice-install] Installed the packaged Supervisor consultation update successfully; reload the VS Code window to apply it.
+
+2026-10-01 14:29 +07 [supervisor-advice] Supervisor discussion now consults up to three relevant profiles or all on request, shows adviser notes, and synthesizes a reply without tools/tasks. Added resilience tests; UI checked light/dark/HC/narrow; docs verification passes.
+
+2026-10-01 14:13 +07 [chat-composer-install] Installed the rebuilt VSIX successfully; reload the VS Code window to apply the narrow composer fix.
+
+2026-10-01 14:12 +07 [chat-composer-narrow] Constrained approval/model controls to distinct columns below 360px; model label truncates within its column. Narrow-width screenshot inspected; typecheck/package/diff check pass.
+
+2026-10-01 14:08 +07 [chat-button-install] Installed the updated VSIX successfully; reload the VS Code window to apply the button styling.
+
+2026-10-01 14:08 +07 [chat-button-style] Aligned Assign task with VS Code button styling: theme button colors, centered arrow/label, 4px corners, hover/focus states; compact icon-only form stays at narrow widths. Light/dark/HC and narrow screenshots inspected; typecheck/package/diff check pass.
+
+2026-10-01 14:06 +07 [chat-tab-style-install] Installed the rebuilt 0.1.0 VSIX with the reference-matched selected tabs; reload the VS Code window to apply it.
+
+2026-10-01 14:06 +07 [chat-tab-style] Matched reference image 2: selected mode now uses a compact rounded active background instead of an underline; high contrast keeps an active outline. Light/dark/HC and narrow screenshots inspected; typecheck, package, and diff check pass.
+
+2026-10-01 14:04 +07 [chat-actions-install] Installed the rebuilt chat tabs/Assign task VSIX successfully; the open VS Code window needs a reload to load it.
+
+2026-10-01 14:04 +07 [chat-actions-ui] Restyled Team/Supervisor/Agent as flat top-nav tabs with an active underline. Moved Assign task to the header; it stays disabled until a draft or discussion exists and can assign an existing discussion with an empty composer. Browser smoke, light/dark/HC and 280–420px renders, typecheck, package, and diff check pass.
+
+2026-10-01 13:57 +07 [chat-install] Installed the fixed 0.1.0 VSIX into the VS Code profile successfully; reload the window to replace the already loaded chat webview.
+
+2026-10-01 13:56 +07 [chat-script-fix] Fixed a missing parenthesis in the mode-tab listener that caused a JavaScript syntax error and left chat controls inert. Browser smoke check: no script errors; typing enables Send, submit posts, Supervisor click posts mode. VSIX package passes.
+
+2026-10-01 13:52 +07 [chat-debug] Confirmed the chat extension activated in the latest VS Code window and the installed chat bundle matches the workspace; no chat-specific host error appeared. Browser script probe passes; screenshot capture is blocked by sandbox Chrome crashpad permissions. Narrowing click/send state.
+
+2026-10-01 13:35 +07 [zustand-lucide] Added a per-webview Zustand query cache with keyed data, deduplicated requests, and host-triggered refresh; retained local React state for private controls and bridge persistence across reloads. Replaced React icon paths with Lucide via typed wrapper. Typecheck, focused store/session tests, light/dark/HC/narrow UI renders, compile and VSIX packaging pass.
+
+2026-10-01 13:29 +07 [chat-mode-tabs] Replaced the Chats title with Team, Supervisor and a workspace agent picker; persisted mode restores accurately from history, including legacy sessions. Session migration tests (7 pass), compile and VSIX packaging pass; browser script probe has no errors, screenshot capture blocked by Chrome crashpad socket permissions.
+
+2026-10-01 13:21 +07 [agent-details-ui] Agent Details now shows compact tool/failure counts and a clean two-line latest-report preview with expandable full text; avoids raw Markdown and very tall cards. Added realistic long-report fixture and details-tab dev preview; package/typecheck and dark/light/HC/narrow screenshots pass.
+
+2026-10-01 13:15 +07 [client-discussion] Team Chat now defaults to tool-free discussion with the selected model; Assign task carries recent discussion into team routing. Verified 280–420px controls plus dark/light/high-contrast renders; compile and VSIX packaging pass.
+
+2026-10-01 12:56 +07 [laya-unsloth] Authenticated local laya-multilingual on :8888 returned HTTP 200 (noul 0.9903); the extension payload failed HTTP 400 because Unsloth rejects keep_alive. Default is now empty; an explicit keep_alive retries once without the field and caches that capability. Live client check recovered, then answered again in 76/26 ms; 102 tests and compile pass.
+
+2026-10-01 12:51 +07 [laya-local-check] Unsloth listens on port 8888 and serves its UI (HTTP 200). VS Code points at localhost:8888/v1/systemone with laya-multilingual, matching the upstream API; an unauthenticated decision request returns HTTP 401. Authenticated extension check awaits the user's saved API key.
+
+2026-10-01 12:33 +07 [workspace-paths] Search now includes filenames; read/outline list directories and missing paths suggest actual files/folders or related content. Agent prompt uses exact search paths; failed chat steps show and retain the error reason. Focused tests, extension typecheck, compile and VSIX package pass; UI checked in light/dark/HC and narrow views. Full suite: 100/101 pass; one Laya timing assertion fails when a 0 ms prior response is omitted from its timeout message.
+
+2026-10-01 12:13 +07 [package] Restored Chalk 5.6.2 vendor files from a tarball matching bun.lock into the local install and Bun cache; VSIX packaging passes. README now uses Bun and documents cache recovery.
+
 2026-10-01 00:58 +07 [flow-review] Compared the user's earlier runs (Lead→Planner→Coder consult chain; Planner self-ask ×5): self-ask loop already guarded (enum excludes self/ancestors, repeat skip, hand-offs off after 2 failures; test passes). Agent Work hand-off rows no longer repeat "Consultation request from …". Result edge now drawn from the chain end instead of the old dashed Lead→Result skip line. 98 tests, VSIX pass.
 
 2026-10-01 00:32 +07 [agent-teams] Agents now decide who works: a new `delegate_team` tool runs several agents at once (parallel, `after` for ordering such as reviewer after coder; results passed on and returned to the caller, who may call more). Any agent may `ask_agent` any other; delegating still needs can-delegate. Team members keep hand-off tools (removed `teamWorker`). Shared guards via `handoffBlocked` plus the new `maxAgentRunsPerRequest` (12) budget. Laya team plans reuse the same `runTeam`, and one failed member no longer stops the team. No-Laya path: no fixed flow; the lead's prompt gets a suggested team from `fallbackTeamPlan` as advice only. Agent Flow now places columns by hand-off chain and draws Result from the chain's end (… → Reviewer → Result, as in the design). Chat: team members are separate hand-off groups; fixed running-list rows shrinking and overlapping once the list overflows. 98 tests, tsc, VSIX pass; team chat feed checked in light/dark/HC and 340px.

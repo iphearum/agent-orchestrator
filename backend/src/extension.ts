@@ -18,6 +18,7 @@ import { WorkspaceTools } from "./tools/workspaceTools";
 import { runWorkspaceCommand } from "./tools/shellTools";
 import { showExternalTools, VsCodeToolHost } from "./vscode/lmTools";
 import { CliAgentTransport, type CliAgentLink } from "./integrations/cliAgentTransport";
+import { DiscussionService, assignmentInstruction } from "./core/discussion";
 
 export async function activate(context: vscode.ExtensionContext) {
   const storageDir = context.globalStorageUri.fsPath;
@@ -34,7 +35,7 @@ export async function activate(context: vscode.ExtensionContext) {
       model: cfg.get<string>("layaModel", ""),
       apiKey: await context.secrets.get("agentOrchestrator.laya.apiKey"),
       timeoutMs: cfg.get<number>("layaTimeoutMs", 5000),
-      keepAlive: cfg.get<string>("layaKeepAlive", "30m")
+      keepAlive: cfg.get<string>("layaKeepAlive", "")
     };
   });
 
@@ -195,9 +196,27 @@ export async function activate(context: vscode.ExtensionContext) {
     return attached;
   };
 
-  const chatView = new ChatWindowProvider(queue, (instruction, agentId, selection: ChatComposerSelection, progress, conversationId, mode) => {
+  const sessions = new SessionRepository(db.connection);
+  const discussion = new DiscussionService(model, sessions);
+  const chatView = new ChatWindowProvider(queue, (instruction, agentId, selection: ChatComposerSelection, progress, conversationId, mode, intent) => {
+    if (intent === "discuss") return discussion.reply(conversationId, instruction, {
+      agentId,
+      supervisorDiscussion: mode === "agent" && agentId === "lead",
+      agents: db.listAgents(),
+      providerId: selection.providerId,
+      model: selection.model,
+      reasoningEffort: selection.reasoningEffort,
+      attachments: selection.attachments,
+      images: selection.images,
+      onChunk: text => progress(text, { type: "chunk", agentId, text }),
+      onThinking: text => progress(text, { type: "thinking_chunk", agentId, text }),
+      onConsultation: (advisorId, advice) => advice
+        ? progress(advice, { type: "thinking_message", agentId: advisorId, text: advice })
+        : progress(`Supervisor is consulting ${db.getAgent(advisorId)?.name ?? advisorId}…`)
+    });
+    const assignedPrompt = assignmentInstruction(instruction, sessions.messages(conversationId, 12).map(({ role, text }) => ({ role, text })));
     const fileContext = selection.attachments.map(file => `\n\n--- Attached file: ${file.name} ---\n${file.content}`).join("");
-    return runPrompt(instruction + fileContext, (message, event) => progress(message, event), agentId, mode === "team", {
+    return runPrompt(assignedPrompt + fileContext, (message, event) => progress(message, event), agentId, mode === "team", {
       conversationId,
       displayPrompt: instruction,
       images: selection.images,
@@ -210,8 +229,9 @@ export async function activate(context: vscode.ExtensionContext) {
       model: selection.model
     });
   }, getComposerConfig, pickAttachments, messageBus, context.extensionUri, {
-    sessions: new SessionRepository(db.connection),
+    sessions,
     agentName: agentId => db.getAgent(agentId)?.name,
+    agents: () => db.listAgents().map(agent => ({ id: agent.id, name: agent.name })),
     remember: (agentId, scope, text, conversationId) => db.remember(agentId, scope === "all" ? "project" : "private", text, "semantic", conversationId),
     layaStatus: () => {
       const cfg = vscode.workspace.getConfiguration("agentOrchestrator");

@@ -19,7 +19,7 @@ const NAV: Array<{ id: NavTarget; label: string; icon: IconName; ready: boolean 
 type SectionId = "agents" | "tasks" | "conversations";
 
 export function SidebarApp() {
-  const { data, error } = useData(() => call("sidebar.get", {}), { scopes: ["agents", "tasks", "health", "conversations"] });
+  const { data, error } = useData(() => call("sidebar.get", {}), { key: "sidebar", scopes: ["agents", "tasks", "health", "conversations"] });
   const [ui, setUi] = useState(() => loadUiState({ nav: "overview" as NavTarget, collapsed: [] as SectionId[] }));
   const update = (patch: Partial<typeof ui>) => {
     const next = { ...ui, ...patch };

@@ -13,5 +13,6 @@
     "baseUrl": ".",
     "paths": { "@shared/*": ["../backend/src/shared/*"] }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "../backend/src/shared/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../backend/src/shared/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

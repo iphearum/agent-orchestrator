@@ -73,6 +73,25 @@ describe("LayaHttpClient", () => {
     expect(client.status.connected).toBe(true);
   });
 
+  it("retries without keep_alive when a Decision API rejects it, then stops sending it", async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    server = Bun.serve({ port: 0, async fetch(request) {
+      const body = await request.json() as Record<string, unknown>;
+      requests.push(body);
+      return "keep_alive" in body
+        ? Response.json({ detail: { error_type: "api_usage_error", message: "Unsupported field(s): keep_alive" } }, { status: 400 })
+        : Response.json({ answers: { agent: { type: "choice", choice: "coder", probabilities: { coder: 0.9, researcher: 0.1 } } } });
+    } });
+    const client = new LayaHttpClient(() => ({ endpoint: `http://127.0.0.1:${server!.port}/v1/systemone`, keepAlive: "30m", timeoutMs: 2000 }));
+
+    expect((await client.decide(state, "global", agents)).agent).toEqual({ value: "coder", confidence: 0.9 });
+    expect(requests.map(body => "keep_alive" in body)).toEqual([true, false]);
+    expect(client.status).toMatchObject({ connected: true, paused: false, consecutiveFailures: 0 });
+
+    await client.decide(state, "global", agents);
+    expect(requests.map(body => "keep_alive" in body)).toEqual([true, false, false]);
+  });
+
   it("asks an agent only the retrieval and tool questions it acts on", async () => {
     const laya = fakeLaya({
       needs_memory: { type: "noul", noul: 0.9794 },

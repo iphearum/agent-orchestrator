@@ -45,13 +45,16 @@
     "desktop:dist": "npm run desktop:build && electron-builder --config desktop/electron-builder.json"
   },
   "dependencies": {
+    "@babylonjs/core": "^9.28.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "lucide-react": "^1.49.0",
     "markdown-it": "^14.3.0",
     "monaco-editor": "^0.52.2",
     "node-pty": "^1.1.0",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -184,19 +187,30 @@
         },
         "agentOrchestrator.externalTools.toolPatterns": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": ["mcp_*"],
           "markdownDescription": "Which registered tools count as agent tools (`*` is a wildcard). The default takes MCP server tools only. Run **Agent Orchestrator: Show External Tools** to see real tool names."
         },
         "agentOrchestrator.externalTools.agentTools": {
           "type": "object",
-          "additionalProperties": { "type": "array", "items": { "type": "string" } },
-          "default": { "*": ["*"] },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default": {
+            "*": ["*"]
+          },
           "markdownDescription": "Which external tools each agent may use: agent id (or `*` for the rest) → tool name patterns. Example: `{ \"devops\": [\"mcp_github_*\", \"mcp_kubernetes_*\"], \"researcher\": [\"mcp_fetch_*\"], \"*\": [] }`."
         },
         "agentOrchestrator.externalTools.autoApprove": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "markdownDescription": "External tools that may run without asking, e.g. read-only ones like `mcp_github_get_*`. All others need approval unless the chat is in Full access mode."
         },
@@ -208,19 +222,44 @@
             "type": "object",
             "required": ["id", "name"],
             "properties": {
-              "id": { "type": "string", "description": "Stable id assigned to agents." },
-              "name": { "type": "string" },
-              "preset": { "type": "string", "enum": ["claude-code", "codex", "custom"], "default": "custom" },
-              "command": { "type": "string", "description": "Executable to run. Presets default to claude / codex." },
-              "args": { "type": "array", "items": { "type": "string" }, "description": "Custom args; {prompt} is replaced by the task, otherwise the task is appended." },
-              "output": { "type": "string", "enum": ["text", "claude-stream-json"], "default": "text" },
-              "timeoutMs": { "type": "number", "default": 900000 }
+              "id": {
+                "type": "string",
+                "description": "Stable id assigned to agents."
+              },
+              "name": {
+                "type": "string"
+              },
+              "preset": {
+                "type": "string",
+                "enum": ["claude-code", "codex", "custom"],
+                "default": "custom"
+              },
+              "command": {
+                "type": "string",
+                "description": "Executable to run. Presets default to claude / codex."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Custom args; {prompt} is replaced by the task, otherwise the task is appended."
+              },
+              "output": {
+                "type": "string",
+                "enum": ["text", "claude-stream-json"],
+                "default": "text"
+              },
+              "timeoutMs": {
+                "type": "number",
+                "default": 900000
+              }
             }
           }
         },
         "agentOrchestrator.baseUrl": {
           "type": "string",
-          "default": "http://localhost:11434/v1",
+          "default": "https://api.openai.com/v1",
           "description": "OpenAI-compatible API base URL."
         },
         "agentOrchestrator.apiKey": {
@@ -355,8 +394,8 @@
         },
         "agentOrchestrator.layaKeepAlive": {
           "type": "string",
-          "default": "30m",
-          "markdownDescription": "Sent as `keep_alive` with each Laya request: how long an Ollama-style server keeps the Laya model loaded after answering, e.g. `30m`, `2h`, or `-1` for as long as the server runs. Loading the model takes 10-30 s on a CPU; a request that may find it unloaded gets 30 s instead of the normal timeout. Leave empty for servers that don't accept the field."
+          "default": "",
+          "markdownDescription": "Optional `keep_alive` for Ollama-style Laya servers, e.g. `30m`, `2h`, or `-1`. Leave empty for Unsloth's Decision API, which rejects this field. If a server rejects it, the extension retries once without it and remembers that for later requests."
         },
         "agentOrchestrator.layaTimeoutMs": {
           "type": "number",

@@ -10,6 +10,7 @@ A SQLite-first VS Code multi-agent runtime with a shared decision layer and per-
 - Global routing plus coder, researcher and planner decision policies
 - Conditional memory and JEV entity retrieval with compact context construction
 - Task/message history
+- Team chat for discussing requirements before explicitly assigning work to agents
 - Multiple named model providers and selectable models
 - OpenAI-compatible chat completions and Anthropic Messages APIs
 - Per-agent system prompts and skills
@@ -24,12 +25,12 @@ A SQLite-first VS Code multi-agent runtime with a shared decision layer and per-
 Run these commands from the repository root:
 
 ```bash
-npm install
-npm run compile
-npm run package
+bun install --frozen-lockfile
+bun run compile
+bun run package
 ```
 
-`npm run package` creates `agent-orchestrator-0.1.0.vsix` in the repository root. Install it in VS Code from a terminal:
+`bun run package` creates `agent-orchestrator-0.1.0.vsix` in the repository root. Install it in VS Code from a terminal:
 
 ```bash
 code --install-extension agent-orchestrator-0.1.0.vsix
@@ -38,8 +39,15 @@ code --install-extension agent-orchestrator-0.1.0.vsix
 To update or reinstall after building a new VSIX, force-install the package:
 
 ```bash
-npm run package
+bun run package
 code --install-extension agent-orchestrator-0.1.0.vsix --force
+```
+
+If packaging reports `Cannot find package '#ansi-styles'` from Chalk, the local Bun cache may contain an incomplete Chalk package. Refresh the locked dependencies, then package again:
+
+```bash
+bun install --frozen-lockfile --force
+bun run package
 ```
 
 To uninstall the extension:
@@ -48,9 +56,9 @@ To uninstall the extension:
 code --uninstall-extension local.agent-orchestrator
 ```
 
-To develop and launch the extension in an Extension Development Host, open this folder in VS Code and press `F5`. For a quick compile without packaging, run `npm run compile`; `npm run watch` recompiles as files change.
+To develop and launch the extension in an Extension Development Host, open this folder in VS Code and press `F5`. For a quick compile without packaging, run `bun run compile`; `bun run watch` recompiles as files change.
 
-On Windows PowerShell, if execution policy prevents the `npm` script from running, use `npm.cmd` in place of `npm` in these commands. The `code` command must be available on your `PATH`; use `code-insiders` for VS Code Insiders.
+The `code` command must be available on your `PATH`; use `code-insiders` for VS Code Insiders.
 
 Configure:
 
@@ -173,20 +181,24 @@ The CLI must be installed and signed in, and be on the `PATH` that VS Code sees.
 The extension can call a Jev-compatible Laya SystemOne service for global agent routing,
 per-agent memory/graph retrieval decisions, and first-capability tool selection. The API
 accepts `POST /v1/systemone` with `{ "state": ..., "questions": ... }`; Laya answers are
-typed choices with confidences. The extension uses neutral A/B choice questions for yes/no
-decisions rather than the `noul` primitive, and never treats a Laya decision as permission
-to run a protected tool.
+typed choices or `noul` probabilities. A Laya decision never grants permission to run a
+protected tool.
 
-Start a local service using the upstream `laya[serve]` package, then set
-`agentOrchestrator.layaEndpoint` (for example `http://localhost:8000/v1/systemone`). For a
+In [Unsloth Desktop](https://unsloth.ai/docs/models/decision-laya), enable **Settings → API →
+Decision API → Serve requests**, then set `agentOrchestrator.layaEndpoint` to
+`http://localhost:8888/v1/systemone`. For a
 remote service, use HTTPS. Store a bearer key with **Agent Orchestrator: Configure Laya API
 Key**, then use **Agent Orchestrator: Test Laya Connection**. For services that host several models, set
 `agentOrchestrator.layaModel` (for example `laya-multilingual`); it is sent as `model` with
 each request. Yes/no questions are sent as native `noul` questions, and both `noul`
 probabilities and older `yes`/`no` choice answers are understood. In the desktop app, set the
 same values under **Settings → Agent orchestration**.
+Unsloth's Decision API does not accept `keep_alive`, so leave `agentOrchestrator.layaKeepAlive`
+empty (the default). Ollama-style Laya servers may use that setting; if one rejects the field,
+the extension retries without it.
 
-If a Laya request fails (for example it times out), Laya is paused and every decision uses the fallback
+An invalid key or request pauses Laya immediately; three consecutive transient failures such as
+timeouts also pause it. While paused, decisions use the fallback
 (`agentOrchestrator.layaFallbackMode`, `rules` recommended) without waiting on Laya again. While paused, one small
 request is sent every `agentOrchestrator.layaRetryMinutes` (default 5, `0` = manual only); Laya resumes when it
 answers. Resume it yourself with **Agent Orchestrator: Resume Laya**, the Laya status bar item, or the chat's
@@ -202,6 +214,11 @@ sections read from the same SQLite runtime records. Workspace file writes ask fo
 default; `approvalMode: "full"` also exposes unrestricted shell commands started in the
 workspace directory. Progress and file changes are shown only when recorded; the view does not
 invent test counts, line diffs, or latency metrics the runtime has not collected.
+
+Workspace search, read, and outline tools use files in the first open VS Code workspace folder.
+Search matches file paths as well as file contents. Directory outlines list paths to use in a
+follow-up call, and a missing path reports existing paths or related content so an agent can
+recover from a guessed filename. These tools currently operate on the open folder itself.
 
 ChatGPT API, Codex CLI, and Claude Code subscription/CLI authentication are separate transports from these API protocols; CLI-backed adapters are not included yet. For API endpoints, configure credentials and base URLs from the provider's API documentation.
 

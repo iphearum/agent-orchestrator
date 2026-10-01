@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { formatOverview, formatSearch, normalizeWorkspaceArgs, outline, readWindow } from "../fileView";
+import { formatDirectory, formatOverview, formatSearch, normalizeWorkspaceArgs, outline, readWindow, suggestWorkspacePaths } from "../fileView";
 
 const numbered = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
 
@@ -74,6 +74,26 @@ describe("formatSearch", () => {
 
   it("guides the agent when nothing matches", () => {
     expect(formatSearch("zzz", [], 40, false)).toContain("No matches");
+  });
+
+  it("shows a filename match without inventing a line number", () => {
+    const text = formatSearch("database.ts", [{ path: "backend/src/persistence/database.ts", line: 0, text: "" }], 40, false);
+    expect(text).toContain("backend/src/persistence/database.ts\n    (path match)");
+  });
+});
+
+describe("workspace navigation", () => {
+  it("lists directory entries as usable workspace-relative paths", () => {
+    const text = formatDirectory("backend/src", [{ name: "tools", directory: true }, { name: "extension.ts", directory: false }]);
+    expect(text).toContain("backend/src/tools/");
+    expect(text).toContain("backend/src/extension.ts");
+  });
+
+  it("suggests real nested directories after a guessed root src path", () => {
+    const paths = ["backend/src/persistence/database.ts", "backend/src/tools/workspaceTools.ts", "webview-ui/src/main.tsx"];
+    expect(suggestWorkspacePaths(paths, "src")).toEqual(["backend/src/", "webview-ui/src/"]);
+    expect(suggestWorkspacePaths(paths, "database.ts")).toEqual(["backend/src/persistence/database.ts"]);
+    expect(suggestWorkspacePaths(paths, "sqlite.ts")).toEqual([]);
   });
 });
 

@@ -612,7 +612,8 @@ export class Orchestrator {
             }
           }
           // Files the agents read or edited become file entities linked to the task (the task's Related Knowledge).
-          if (!toolFailed && toolPath && ["read_file", "file_outline", "write_file"].includes(call.function.name)) {
+          const listedDirectory = toolPath && result.startsWith(`${toolPath.replace(/\/$/, "")}/ · directory`);
+          if (!toolFailed && !listedDirectory && toolPath && ["read_file", "file_outline", "write_file"].includes(call.function.name)) {
             try { this.jev.linkFile(ctx.rootTaskId, toolPath, call.function.name === "write_file" ? "edited" : "read"); } catch { /* knowledge links are best-effort */ }
           }
           if (toolFailed && HANDOFF_TOOLS.includes(call.function.name) && ++failedDelegations >= 2 && decisionTools.some(tool => HANDOFF_TOOLS.includes(tool.function.name))) {
@@ -1021,6 +1022,7 @@ ${recentContext.length ? recentContext.join("\n") : "(none)"}`;
     return `Workspace:
 - "The project", "this code", "the repo" and similar mean the workspace that is open in the editor.
 - Look before you ask: use search_workspace and read_file (start with README.md, package.json or the main entry point) to learn what the project is.
+- Copy exact workspace-relative paths from search results or directory outlines. Do not guess filenames or assume a root src/ directory exists.
 - Only ask the user for things the workspace cannot tell you, and say what you already found.
 
 `;

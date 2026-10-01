@@ -93,7 +93,7 @@ const task: TaskBundle = {
     { id: "e7", at: today("10:29"), kind: "tool", agent: coder, label: "Added null check and improved error handling. Running tests...", tool: tool("r6", "run_command", "Run Tests"), status: "succeeded" },
     { id: "e8", at: today("10:30"), kind: "message", agent: reviewer, label: "Reviewing changes. Looks good. Minor suggestion on logging.", tool: tool("r7", "read_file", "Code Review"), status: "succeeded" },
     { id: "e9", at: today("10:31"), kind: "tool", agent: coder, label: "Updated logging as suggested.", tool: tool("r8", "write_file", "Edit File"), status: "succeeded" },
-    { id: "e10", at: today("10:32"), kind: "result", agent: supervisor, label: "All subtasks completed. The fix has been implemented and tested.", status: "task_completed" }
+    { id: "e10", at: today("10:32"), kind: "result", agent: supervisor, label: "Reported back to Lead: Based on my investigation of the Agent Orchestrator codebase, here are the **specific SQLite optimizations implemented**:\n\n### 1. Journal mode\nEnabled WAL for concurrent reads and writes.\n\n### 2. Query performance\nAdded indexes for active task lookups and recent conversation messages. All subtasks completed and tested.", status: "task_completed" }
   ],
   logs: [{ id: "l1", at: today("10:24"), kind: "routing", agentId: "supervisor", data: '{"source":"laya","agent":{"value":"supervisor","confidence":0.96}}' }],
   toolRuns: [{ id: "r6", ref: "tool://r6", agentId: "coder", toolName: "run_command", displayName: "Shell Command", status: "completed", summary: "exit 0 · 12 passed in 2.40s", arguments: '{"command":"pytest -v tests/test_auth.py"}', createdAt: today("10:29"), durationMs: 2400 }],

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { AgentDatabase } from "../../../persistence/database";
 import { SessionRepository } from "../sessions";
 
@@ -60,6 +61,33 @@ describe("reply traces", () => {
 });
 
 describe("SessionRepository", () => {
+  it("stores whether a Lead conversation is Team or Supervisor mode", () => {
+    sessions.ensure("team", "Team chat", "lead", "team");
+    sessions.ensure("supervisor", "Supervisor chat", "lead", "supervisor");
+
+    expect(sessions.get("team")).toMatchObject({ agentId: "lead", chatMode: "team" });
+    expect(sessions.get("supervisor")).toMatchObject({ agentId: "lead", chatMode: "supervisor" });
+    expect(sessions.list({ archived: false }).map(item => item.chatMode).sort()).toEqual(["supervisor", "team"]);
+  });
+
+  it("upgrades existing sessions and preserves their inferred modes", () => {
+    const legacyDir = mkdtempSync(join(tmpdir(), "sessions-legacy-"));
+    const legacyFile = join(legacyDir, "runtime.db");
+    const old = new DatabaseSync(legacyFile);
+    old.exec("CREATE TABLE schema_version(version INTEGER NOT NULL); INSERT INTO schema_version VALUES (2); CREATE TABLE conversations(id TEXT PRIMARY KEY, user_id TEXT, title TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, agent_id TEXT, archived_at TEXT); INSERT INTO conversations(id,title,agent_id) VALUES ('legacy-team','Old team','lead'), ('legacy-agent','Old agent','coder');");
+    old.close();
+    const upgraded = new AgentDatabase(legacyDir);
+    try {
+      const repository = new SessionRepository(upgraded.connection);
+      expect(repository.get("legacy-team")).toMatchObject({ chatMode: "team", title: "Old team" });
+      expect(repository.get("legacy-agent")).toMatchObject({ chatMode: "agent", title: "Old agent" });
+      expect((upgraded.connection.prepare("SELECT version FROM schema_version").get() as { version: number }).version).toBe(3);
+    } finally {
+      upgraded.connection.close();
+      rmSync(legacyDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    }
+  });
+
   it("continues an existing session instead of creating another", () => {
     sessions.ensure("s1", "Fix the login bug", "coder");
     db.addConversationMessage("m1", "s1", null, "user", "Fix the login bug");

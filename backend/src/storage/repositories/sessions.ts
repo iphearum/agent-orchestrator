@@ -1,10 +1,12 @@
 import type { DatabaseSync } from "node:sqlite";
+import { randomUUID } from "node:crypto";
 
 /** A chat session is a conversation row, owned by one agent, optionally archived. */
 export interface SessionSummary {
   id: string;
   title: string;
   agentId: string | null;
+  chatMode: "team" | "supervisor" | "agent";
   updatedAt: string;
   archived: boolean;
   preview: string;
@@ -45,16 +47,22 @@ const parseTrace = (json: string | null): ReplyTrace | undefined => {
   try { const trace = JSON.parse(json); return trace?.version === 1 && Array.isArray(trace.steps) ? trace : undefined; } catch { return undefined; }
 };
 
-type Row = { id: string; title: string | null; agent_id: string | null; updated_at: string; archived_at: string | null; preview: string | null; turns: number };
+type Row = { id: string; title: string | null; agent_id: string | null; chat_mode: "team" | "supervisor" | "agent" | null; updated_at: string; archived_at: string | null; preview: string | null; turns: number };
 
 const iso = (value: string | null | undefined) => !value ? "" : value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
 
 export class SessionRepository {
   constructor(private readonly db: DatabaseSync) {}
 
+  /** Discussion turns are saved without creating a task or trace. */
+  addDiscussionMessage(conversationId: string, agentId: string | null, role: "user" | "result", text: string) {
+    this.db.prepare("INSERT INTO messages(id, conversation_id, agent_id, role, content) VALUES (?, ?, ?, ?, ?)")
+      .run(randomUUID(), conversationId, agentId, role, text);
+  }
+
   /** Newest first. Archived and active sessions are listed separately. */
   list(options: { archived: boolean; limit?: number }): SessionSummary[] {
-    const rows = this.db.prepare(`SELECT c.id, c.title, c.agent_id, c.updated_at, c.archived_at,
+    const rows = this.db.prepare(`SELECT c.id, c.title, c.agent_id, c.chat_mode, c.updated_at, c.archived_at,
         (SELECT m.content FROM messages m WHERE m.conversation_id = c.id AND m.role IN ('user', 'result') ORDER BY m.rowid DESC LIMIT 1) AS preview,
         (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.role = 'user') AS turns
       FROM conversations c
@@ -64,7 +72,7 @@ export class SessionRepository {
   }
 
   get(id: string): SessionSummary | undefined {
-    const row = this.db.prepare(`SELECT c.id, c.title, c.agent_id, c.updated_at, c.archived_at, NULL AS preview,
+    const row = this.db.prepare(`SELECT c.id, c.title, c.agent_id, c.chat_mode, c.updated_at, c.archived_at, NULL AS preview,
         (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.role = 'user') AS turns
       FROM conversations c WHERE c.id = ?`).get(id) as unknown as Row | undefined;
     return row ? this.summary(row) : undefined;
@@ -100,9 +108,9 @@ export class SessionRepository {
   }
 
   /** Create the session before its first run, so the orchestrator continues it instead of starting a new one. */
-  ensure(id: string, title: string, agentId: string) {
-    this.db.prepare(`INSERT INTO conversations(id, title, agent_id) VALUES (?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET agent_id = COALESCE(conversations.agent_id, excluded.agent_id)`).run(id, title.replace(/\s+/g, " ").trim().slice(0, 120) || "New chat", agentId);
+  ensure(id: string, title: string, agentId: string, chatMode: "team" | "supervisor" | "agent" = "agent") {
+    this.db.prepare(`INSERT INTO conversations(id, title, agent_id, chat_mode) VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET agent_id = COALESCE(conversations.agent_id, excluded.agent_id)`).run(id, title.replace(/\s+/g, " ").trim().slice(0, 120) || "New chat", agentId, chatMode);
   }
 
   rename(id: string, title: string) {
@@ -115,7 +123,8 @@ export class SessionRepository {
 
   private summary(row: Row): SessionSummary {
     return {
-      id: row.id, title: row.title || "Untitled chat", agentId: row.agent_id, updatedAt: iso(row.updated_at),
+      id: row.id, title: row.title || "Untitled chat", agentId: row.agent_id,
+      chatMode: row.chat_mode === "team" || row.chat_mode === "supervisor" ? row.chat_mode : "agent", updatedAt: iso(row.updated_at),
       archived: Boolean(row.archived_at), preview: (row.preview ?? "").replace(/\s+/g, " ").trim().slice(0, 140), turns: Number(row.turns) || 0
     };
   }

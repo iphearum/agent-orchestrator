@@ -114,13 +114,38 @@ export function outline(path: string, content: string, maxEntries = 120): string
 
 export interface SearchMatch { path: string; line: number; text: string }
 
+/** Directories are useful navigation targets, but they cannot be passed to a file reader. */
+export function formatDirectory(path: string, entries: Array<{ name: string; directory: boolean }>, maxEntries = 80): string {
+  const shown = [...entries].sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name)).slice(0, maxEntries);
+  const lines = shown.map(entry => `${path.replace(/\/$/, "")}/${entry.name}${entry.directory ? "/" : ""}`);
+  return `${path}/ · directory (${entries.length} entries)\n${lines.join("\n") || "(empty)"}${entries.length > shown.length ? "\n…" : ""}\n[Use read_file or file_outline with a file path above; open a subdirectory with file_outline.]`;
+}
+
+/** Suggest actual workspace paths after a model guesses a basename or directory. */
+export function suggestWorkspacePaths(paths: string[], requested: string, max = 6): string[] {
+  const name = requested.replace(/\\/g, "/").replace(/\/$/, "").split("/").pop()?.toLowerCase() ?? "";
+  if (!name) return [];
+  const directories = new Set<string>();
+  for (const path of paths) {
+    const parts = path.split("/");
+    for (let i = 1; i < parts.length; i++) directories.add(parts.slice(0, i).join("/"));
+  }
+  const exactFiles = paths.filter(path => path.split("/").pop()?.toLowerCase() === name);
+  const exactDirectories = [...directories].filter(path => path.split("/").pop()?.toLowerCase() === name).map(path => `${path}/`);
+  const stem = name.replace(/\.[^.]+$/, "");
+  const partial = !exactFiles.length && !exactDirectories.length && stem.length >= 3
+    ? paths.filter(path => path.split("/").pop()?.toLowerCase().includes(stem))
+    : [];
+  return [...exactFiles, ...exactDirectories, ...partial].slice(0, max);
+}
+
 /** Grep-style output grouped by file; long lines are trimmed around the match. */
 export function formatSearch(query: string, matches: SearchMatch[], scannedFiles: number, truncated: boolean): string {
   if (!matches.length) return `No matches for "${query}" in ${scannedFiles} files. Try a shorter or different term.`;
   const byFile = new Map<string, SearchMatch[]>();
   for (const match of matches) byFile.set(match.path, [...(byFile.get(match.path) ?? []), match]);
   const needle = query.toLowerCase();
-  const blocks = [...byFile].map(([path, found]) => `${path}\n${found.map(match => `${String(match.line).padStart(5)}: ${around(match.text, needle)}`).join("\n")}`);
+  const blocks = [...byFile].map(([path, found]) => `${path}\n${found.map(match => match.line === 0 ? "    (path match)" : `${String(match.line).padStart(5)}: ${around(match.text, needle)}`).join("\n")}`);
   const summary = `${matches.length} match${matches.length === 1 ? "" : "es"} for "${query}" in ${byFile.size} file${byFile.size === 1 ? "" : "s"} (${scannedFiles} scanned)${truncated ? "; more exist, narrow the query or glob" : ""}.`;
   return `${summary}\n${blocks.join("\n")}\n[Open a hit with read_file start_line near the line number.]`;
 }

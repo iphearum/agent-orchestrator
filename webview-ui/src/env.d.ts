@@ -17,6 +17,7 @@ declare module "markdown-it" {
   export default class MarkdownIt {
     constructor(options?: MarkdownItOptions);
     render(source: string): string;
+    renderInline(source: string): string;
   }
 }
 

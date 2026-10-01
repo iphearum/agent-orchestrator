@@ -135,6 +135,7 @@ export class LayaHttpClient {
   /** After a transient failure the model may still be loading, so the next request gets the cold-start timeout. */
   private mayBeCold = false;
   private configuredTarget?: string;
+  private keepAliveUnsupported = false;
   /** How long the last answered request took, so a timeout can say how far off the limit is. */
   private lastLatencyMs?: number;
 
@@ -160,8 +161,8 @@ export class LayaHttpClient {
     const loaded = await this.config();
     const cfg = { ...loaded, endpoint: loaded.endpoint.trim() };
     // New endpoint, model or key: whatever failed before may work now, so resume.
-    const target = `${cfg.endpoint}\n${cfg.model ?? ""}\n${cfg.apiKey ?? ""}`;
-    if (this.configuredTarget !== target) { this.configuredTarget = target; this.resume(); }
+    const target = `${cfg.endpoint}\n${cfg.model ?? ""}\n${cfg.apiKey ?? ""}\n${cfg.keepAlive ?? ""}`;
+    if (this.configuredTarget !== target) { this.configuredTarget = target; this.keepAliveUnsupported = false; this.resume(); }
     if (!force && this.pausedAt) {
       // Paused for the session: skip Laya without waiting on it, and say so in the trace.
       throw new Error(`Laya is paused since ${new Date(this.pausedAt).toLocaleTimeString()} after: ${this.lastError || "an earlier failure"} Using the fallback until Laya is resumed.`);
@@ -181,17 +182,29 @@ export class LayaHttpClient {
       ? this.stateText(state, policy)
       : this.compactState(state);
     const controller = new AbortController();
-    const cold = this.isCold(keepAlive);
+    const cold = this.isCold(this.keepAliveUnsupported ? undefined : keepAlive);
     const timeoutMs = Math.max(100, Math.min(60_000, Math.max(cfg.timeoutMs, minTimeoutMs, cold ? COLD_START_TIMEOUT_MS : 0)));
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const startedAt = Date.now();
     try {
-      const response = await fetch(endpoint, {
+      const send = (includeKeepAlive: boolean) => fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json", ...(cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}) },
-        body: JSON.stringify({ ...(model ? { model } : {}), ...(keepAlive ? { keep_alive: keepAlive } : {}), state: requestState, questions }),
+        body: JSON.stringify({ ...(model ? { model } : {}), ...(includeKeepAlive ? { keep_alive: keepAlive } : {}), state: requestState, questions }),
         signal: controller.signal
       });
+      const requestedKeepAlive = Boolean(keepAlive) && !this.keepAliveUnsupported;
+      let response = await send(requestedKeepAlive);
+      if (requestedKeepAlive && response.status === 400) {
+        const detail = await response.text();
+        if (/Unsupported field\(s\):\s*keep_alive/i.test(detail)) {
+          // Unsloth's Decision API rejects this Ollama-only extension; retry within the same timeout.
+          this.keepAliveUnsupported = true;
+          response = await send(false);
+        } else {
+          throw new LayaHttpError(response.status, `Laya returned HTTP ${response.status}: ${detail.slice(0, 400)}`);
+        }
+      }
       if (!response.ok) throw new LayaHttpError(response.status, `Laya returned HTTP ${response.status}: ${(await response.text()).slice(0, 400)}`);
       const data = await response.json() as { answers?: Record<string, Answer>; routing?: unknown };
       if (!data.answers || typeof data.answers !== "object") throw new Error("Laya returned a response without typed answers.");
@@ -205,7 +218,7 @@ export class LayaHttpClient {
     } catch (error) {
       const aborted = controller.signal.aborted;
       this.lastError = aborted
-        ? `Laya request timed out after ${timeoutMs}ms${this.lastLatencyMs ? ` (the last answer took ${this.lastLatencyMs}ms)` : ""}. Raise the Laya timeout if the service is slow.`
+        ? `Laya request timed out after ${timeoutMs}ms${this.lastLatencyMs !== undefined ? ` (the last answer took ${this.lastLatencyMs}ms)` : ""}. Raise the Laya timeout if the service is slow.`
         : error instanceof Error ? error.message : String(error);
       this.consecutiveFailures++;
       this.mayBeCold = true;

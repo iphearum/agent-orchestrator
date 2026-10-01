@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { formatOverview, formatSearch, normalizeWorkspaceArgs, outline, readWindow, type SearchMatch } from "./fileView";
+import { formatDirectory, formatOverview, formatSearch, normalizeWorkspaceArgs, outline, readWindow, suggestWorkspacePaths, type SearchMatch } from "./fileView";
 
 const EXCLUDE = "{**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/out/**,**/coverage/**,**/*.lock,**/*.min.js,**/*.map}";
 
@@ -51,20 +51,29 @@ export class WorkspaceTools {
     return formatOverview(files.map(uri => vscode.workspace.asRelativePath(uri, false)), reason);
   }
 
-  /** A path that doesn't exist: suggest files with the same name instead of a bare error. */
+  /** A guessed path: return real file or directory paths and a bounded content hint. */
   private async notFound(folder: vscode.WorkspaceFolder, relativePath: string) {
+    const files = await this.listFiles(folder, "**/*", 2000);
+    const similar = suggestWorkspacePaths(files.map(uri => vscode.workspace.asRelativePath(uri, false)), relativePath);
     const base = relativePath.split(/[\\/]/).pop() ?? "";
-    const escaped = base.replace(/[[\]{}*?]/g, "");
-    const similar = escaped ? await this.listFiles(folder, `**/${escaped}`, 5).then(uris => uris.map(uri => vscode.workspace.asRelativePath(uri, false)), () => []) : [];
-    return JSON.stringify({ error: `File not found: ${relativePath}.${similar.length ? ` Files with that name: ${similar.join(", ")}.` : " Use search_workspace to find the right path."}` });
+    const stem = base.replace(/\.[^.]+$/, "");
+    const related = !similar.length && stem.length >= 3
+      ? ` Relevant content:\n${(await this.search(folder, stem, "**/*")).slice(0, 1800)}`
+      : "";
+    return JSON.stringify({ error: `Path not found: ${relativePath}.${similar.length ? ` Existing paths: ${similar.join(", ")}.` : ""}${related} Use an existing workspace-relative path.` });
   }
 
   /** Grep-style: matching lines with line numbers, at most a few per file so one file cannot crowd out the rest. */
   private async search(folder: vscode.WorkspaceFolder, query: string, glob: string) {
-    const files = await this.listFiles(folder, glob);
+    const files = (await this.listFiles(folder, glob)).sort((a, b) => vscode.workspace.asRelativePath(a, false).localeCompare(vscode.workspace.asRelativePath(b, false)));
     const needle = query.toLowerCase();
     const matches: SearchMatch[] = [];
     let scanned = 0, truncated = false;
+    for (const uri of files) {
+      const path = vscode.workspace.asRelativePath(uri, false);
+      if (path.toLowerCase().includes(needle)) matches.push({ path, line: 0, text: "" });
+      if (matches.length >= 20) { truncated = true; break; }
+    }
     for (const uri of files) {
       if (matches.length >= 60) { truncated = true; break; }
       try {
@@ -76,7 +85,7 @@ export class WorkspaceTools {
         for (let i = 0; i < lines.length; i++) {
           if (!lines[i].toLowerCase().includes(needle)) continue;
           if (inFile++ >= 6 || matches.length >= 60) { truncated = true; break; }
-          matches.push({ path: vscode.workspace.asRelativePath(uri), line: i + 1, text: lines[i] });
+          matches.push({ path: vscode.workspace.asRelativePath(uri, false), line: i + 1, text: lines[i] });
         }
       } catch { /* Skip unreadable files. */ }
     }
@@ -86,6 +95,8 @@ export class WorkspaceTools {
   /** A numbered window of the file (about 160 lines); agents page through with start_line/end_line. */
   private async read(folder: vscode.WorkspaceFolder, relativePath: string, start?: number, end?: number) {
     const target = this.resolve(folder, relativePath);
+    const stat = await vscode.workspace.fs.stat(target.uri);
+    if (stat.type & vscode.FileType.Directory) return this.directory(target.uri, target.relative);
     const bytes = await vscode.workspace.fs.readFile(target.uri);
     if (bytes.byteLength > 5_000_000) throw new Error("File is larger than 5 MB. Use search_workspace to find the relevant lines.");
     return readWindow(target.relative, new TextDecoder("utf-8").decode(bytes), start, end);
@@ -93,9 +104,16 @@ export class WorkspaceTools {
 
   private async outline(folder: vscode.WorkspaceFolder, relativePath: string) {
     const target = this.resolve(folder, relativePath);
+    const stat = await vscode.workspace.fs.stat(target.uri);
+    if (stat.type & vscode.FileType.Directory) return this.directory(target.uri, target.relative);
     const bytes = await vscode.workspace.fs.readFile(target.uri);
     if (bytes.byteLength > 5_000_000) throw new Error("File is larger than 5 MB.");
     return outline(target.relative, new TextDecoder("utf-8").decode(bytes));
+  }
+
+  private async directory(uri: vscode.Uri, relativePath: string) {
+    const entries = await vscode.workspace.fs.readDirectory(uri);
+    return formatDirectory(relativePath, entries.map(([name, type]) => ({ name, directory: Boolean(type & vscode.FileType.Directory) })));
   }
 
   private async write(folder: vscode.WorkspaceFolder, relativePath: string, content: string) {

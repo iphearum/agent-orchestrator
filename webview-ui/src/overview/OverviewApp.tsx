@@ -9,13 +9,13 @@ import { AgentFlowGraph, PlanChecklist } from "../task/FlowPanel";
 
 /** Workspace dashboard. The Activity Bar sidebar already provides navigation, so this page has none of its own. */
 export function OverviewApp() {
-  const { data, error } = useData(() => call("overview.get", {}), { scopes: ["agents", "tasks", "health", "conversations"] });
+  const { data, error } = useData(() => call("overview.get", {}), { key: "overview", scopes: ["agents", "tasks", "health", "conversations"] });
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [flowScale, setFlowScale] = useState(1);
   const [fitFlowRequest, setFitFlowRequest] = useState(0);
   const taskId = selectedTaskId || data?.recentTasks.find(task => task.running)?.id || data?.recentTasks[0]?.id || "";
   const { data: work, error: workError } = useData<TaskBundle>(
-    () => call("task.get", { taskId }), { scopes: ["agents", "tasks"], taskId, enabled: Boolean(taskId) }
+    () => call("task.get", { taskId }), { key: `task:${taskId}`, scopes: ["agents", "tasks"], taskId, enabled: Boolean(taskId) }
   );
   if (error && !data) return <div className="overview"><Empty icon="error">Could not load the overview: {error}</Empty></div>;
   if (!data) return <div className="overview"><Empty>Loading…</Empty></div>;

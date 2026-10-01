@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { FileChangeView, KnowledgeItem, TaskBundle, TaskView, ToolRunView, WorkEvent } from "@shared/protocol";
 import { call, loadUiState, onInit, saveUiState } from "../bridge";
 import { AgentChip, Avatar, Empty, Pill, Splitter, StatusDot, Tabs, useNarrow } from "../components";
-import { agentStateLabel, dateTime, priorityLabel, relative, taskStatusLabel } from "../format";
+import { agentStateLabel, clock, dateTime, priorityLabel, relative, taskStatusLabel } from "../format";
 import { entityIcon, Icon } from "../icons";
 import { useData } from "../useData";
 import { ConversationCard, CodePanel, TestResultsCard, type CodeTab } from "./BottomPanels";
@@ -12,7 +12,7 @@ import { WorkPanel, type WorkTab } from "./WorkPanel";
 type DetailsTab = "task" | "agents" | "files";
 /** Pane sizes in pixels; the Work panel and the Agent Conversation card take whatever is left. */
 const DEFAULT_SIZES = { detailsWidth: 320, flowHeight: 250, bottomHeight: 240, codeWidth: 520, testsWidth: 250 };
-const DEFAULT_UI = { taskId: "", flowTab: "flow" as FlowTab, workTab: "work" as WorkTab, codeTab: "code" as CodeTab, detailsTab: "task" as DetailsTab, groupByAgent: false, autoScroll: true, ...DEFAULT_SIZES };
+const DEFAULT_UI = { taskId: "", flowTab: "flow" as FlowTab, workTab: "work" as WorkTab, codeTab: "code" as CodeTab, detailsTab: new URLSearchParams(location.search).get("details") === "agents" ? "agents" as DetailsTab : "task" as DetailsTab, groupByAgent: false, autoScroll: true, ...DEFAULT_SIZES };
 
 /** `taskId` is given by the desktop shell; VS Code panels get theirs from the host's init message. */
 export function TaskApp({ taskId: fixedTaskId }: { taskId?: string } = {}) {
@@ -27,7 +27,7 @@ export function TaskApp({ taskId: fixedTaskId }: { taskId?: string } = {}) {
   useEffect(() => onInit(init => { if (init.context.taskId) update({ taskId: init.context.taskId }); }), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const narrow = useNarrow();
-  const { data, error, reload } = useData<TaskBundle>(() => call("task.get", { taskId }), { scopes: ["tasks", "agents"], taskId, enabled: Boolean(taskId) });
+  const { data, error, reload } = useData<TaskBundle>(() => call("task.get", { taskId }), { key: `task:${taskId}`, scopes: ["tasks", "agents"], taskId, enabled: Boolean(taskId) });
   if (error && !data) return <div className="task-app"><Empty icon="error">{error}</Empty></div>;
   if (!data) return <div className="task-app"><Empty>Loading task…</Empty></div>;
 
@@ -232,17 +232,44 @@ function AgentDetails({ task, events, toolRuns }: { task: TaskView; events: Work
       {task.assignees.map(({ agent, activity }) => {
         const runs = toolRuns.filter(run => run.agentId === agent.id);
         const last = [...events].reverse().find(event => event.agent?.id === agent.id && event.kind !== "live");
+        const failed = runs.filter(run => run.status === "failed").length;
+        const lastText = last ? cleanAgentReport(last.label) : "";
         return (
-          <section key={agent.id} className="detail-section">
+          <section key={agent.id} className="detail-section agent-detail-card">
             <div className="agent-detail-head"><Avatar agent={agent} size={32} /><span className="assignee-copy"><strong>{agent.name}</strong><small>{activity} · {agentStateLabel[agent.state]}</small></span></div>
-            <dl className="props">
-              <dt>Tool calls</dt><dd>{runs.length}{runs.some(run => run.status === "failed") ? ` (${runs.filter(run => run.status === "failed").length} failed)` : ""}</dd>
-              <dt>Last action</dt><dd>{last ? last.label : "—"}</dd>
-            </dl>
-            <button type="button" className="button secondary small" onClick={() => void call("ui.chatWithAgent", { agentId: agent.id })}><Icon name="chat" /> Chat with {agent.name}</button>
+            <div className="agent-detail-stats" aria-label="Agent activity">
+              <span className="agent-stat"><Icon name="tools" size={13} /> {runs.length} tool calls</span>
+              {failed > 0 && <span className="agent-stat failed"><Icon name="error" size={13} /> {failed} failed</span>}
+            </div>
+            {last ? (
+              <details className="agent-last-action">
+                <summary>
+                  <span className="agent-last-label">Latest activity <time>{clock(last.at)}</time></span>
+                  <span className="agent-last-preview" title={lastText}>{lastText}</span>
+                  <span className="agent-last-toggle">View report</span>
+                </summary>
+                <p>{lastText}</p>
+              </details>
+            ) : <p className="agent-no-action">No activity recorded yet.</p>}
+            <button type="button" className="button secondary small agent-chat-action" onClick={() => void call("ui.chatWithAgent", { agentId: agent.id })}><Icon name="chat" /> Chat with {agent.name}</button>
           </section>
         );
       })}
     </div>
   );
+}
+
+function cleanAgentReport(text: string) {
+  return text
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+    .replace(/\*\*(.*?)\*\*/gs, "$1")
+    .replace(/__(.*?)__/gs, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/\x60([^\x60]+)\x60/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s*[-*+]\s+/gm, "• ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 3000);
 }

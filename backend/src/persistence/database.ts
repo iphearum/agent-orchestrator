@@ -54,6 +54,9 @@ export class AgentDatabase {
     const conversationColumns = this.db.prepare("PRAGMA table_info(conversations)").all() as Array<{ name: string }>;
     if (!conversationColumns.some(column => column.name === "agent_id")) this.db.exec("ALTER TABLE conversations ADD COLUMN agent_id TEXT");
     if (!conversationColumns.some(column => column.name === "archived_at")) this.db.exec("ALTER TABLE conversations ADD COLUMN archived_at TEXT");
+    // Schema migration 3: retain the chat mode separately because Team and Supervisor both use the Lead agent.
+    if (!conversationColumns.some(column => column.name === "chat_mode")) this.db.exec("ALTER TABLE conversations ADD COLUMN chat_mode TEXT NOT NULL DEFAULT 'team'");
+    this.db.exec("UPDATE conversations SET chat_mode = CASE WHEN agent_id = 'lead' THEN 'team' ELSE 'agent' END WHERE agent_id IS NOT NULL AND chat_mode = 'team' AND agent_id <> 'lead'");
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_conversations_recent ON conversations(archived_at, updated_at)");
     // Chat replies keep a record of how they were produced (steps, thinking, duration) so reopened chats can show it.
     const messageColumns = this.db.prepare("PRAGMA table_info(messages)").all() as Array<{ name: string }>;
@@ -68,7 +71,8 @@ export class AgentDatabase {
     if (!toolRunColumns.some(column => column.name === "task_id")) this.db.exec("ALTER TABLE tool_runs ADD COLUMN task_id TEXT");
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_tool_runs_task ON tool_runs(task_id, created_at)");
     const version = this.db.prepare("SELECT version FROM schema_version LIMIT 1").get() as { version?: number } | undefined;
-    if (!version) this.db.prepare("INSERT INTO schema_version(version) VALUES (1)").run();
+    if (!version) this.db.prepare("INSERT INTO schema_version(version) VALUES (3)").run();
+    else if ((version.version ?? 0) < 3) this.db.prepare("UPDATE schema_version SET version = 3").run();
   }
 
   seedAgents() {
