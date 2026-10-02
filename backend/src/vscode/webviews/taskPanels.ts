@@ -41,6 +41,11 @@ export class TaskPanels implements vscode.Disposable, vscode.WebviewPanelSeriali
     }
   }
 
+  /** Re-render every open task page (e.g. after agentOrchestrator.robotModel changes). */
+  reload() {
+    for (const { panel } of this.panels.values()) panel.webview.html = renderHtml(panel.webview, this.extensionUri, "task", panel.title);
+  }
+
   dispose() {
     for (const open of this.panels.values()) open.panel.dispose();
     this.panels.clear();

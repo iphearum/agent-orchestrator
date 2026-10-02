@@ -32,7 +32,7 @@
   "scripts": {
     "compile": "tsc -p . && bun run build:webview",
     "watch": "tsc -watch -p .",
-    "build:webview": "bun build webview-ui/src/main.tsx --target=browser --format=esm --production --entry-naming [name].[ext] --asset-naming [name].[ext] --outdir dist/webview && bun build webview-ui/src/robot-runtime.ts --target=browser --format=iife --production --minify --outfile dist/webview/robot-runtime.js",
+    "build:webview": "bun build webview-ui/src/main.tsx --target=browser --format=esm --production --entry-naming [name].[ext] --asset-naming [name].[ext] --outdir dist/webview && bun scripts/build-robot-runtime.ts",
     "watch:webview": "bun run build:webview --watch",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p webview-ui",
     "test": "bun test ./backend/src ./webview-ui/src",
@@ -61,10 +61,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/vscode": "^1.104.0",
-    "@vscode/vsce": "^3.6.0",
+    "@vscode/vsce": "^4.0.0",
     "concurrently": "^9.2.0",
     "electron": "^38.0.0",
     "electron-builder": "^26.0.12",
+    "meshoptimizer": "^1.3.0",
+    "sharp": "^0.35.5",
     "typescript": "^5.9.2",
     "vite": "^7.1.0",
     "wait-on": "^8.0.4"
@@ -448,6 +450,13 @@
           "enum": ["ask", "approve", "full"],
           "default": "ask",
           "description": "ask prompts before workspace writes and persistent memory changes; approve allows those workspace-scoped changes automatically; full also exposes shell commands with current-user permissions, started in the workspace directory."
+        },
+        "agentOrchestrator.robotModel": {
+          "type": "string",
+          "enum": ["default", "jocy", "ally", "vally", "meshy", "buddy", "jarvis"],
+          "enumDescriptions": ["The procedural pearl-white robot.", "Jocy: a small white-and-navy toy robot.", "Ally: a detailed sci-fi robot caught mid-leap.", "Vally: a pearl-white waving robot with a large rounded visor.", "Meshy: a blue-and-white articulated robot.", "Buddy: a teal-accented humanoid robot.", "Jarvis: a chibi crimson-and-silver armoured hero with glowing eye slits."],
+          "default": "default",
+          "description": "3D robot used by the chat welcome hero and the agent avatars. Every model plays the same animations. Open chat windows update as soon as this setting changes."
         },
         "agentOrchestrator.automaticExecutionConfidence": {
           "type": "number",

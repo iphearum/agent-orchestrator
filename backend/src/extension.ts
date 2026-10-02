@@ -252,6 +252,9 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(chatView);
   context.subscriptions.push(vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID, chatView));
+  context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+    if (event.affectsConfiguration("agentOrchestrator.robotModel")) chatView.reloadRobotModel();
+  }));
   const workbench = new Workbench(context, db, activity, {
     layaEnabled: () => vscode.workspace.getConfiguration("agentOrchestrator").get<boolean>("layaEnabled", true),
     layaEndpoint: () => vscode.workspace.getConfiguration("agentOrchestrator").get<string>("layaEndpoint", ""),
@@ -271,6 +274,7 @@ export async function activate(context: vscode.ExtensionContext) {
   };
   warmUpLaya();
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+    if (event.affectsConfiguration("agentOrchestrator.robotModel")) chatView.reloadRobot();
     if (["layaEnabled", "layaEndpoint", "layaModel", "layaKeepAlive"].some(key => event.affectsConfiguration(`agentOrchestrator.${key}`))) warmUpLaya();
   }));
   context.subscriptions.push(vscode.commands.registerCommand("agentOrchestrator.chatWithAgent", async (agentId: string) => {

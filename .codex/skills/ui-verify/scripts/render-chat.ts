@@ -19,7 +19,8 @@ if (!existsSync(compiled)) throw new Error("dist/vscode/chatWindow.js is missing
 // The chat host imports `vscode`; a stub is enough to generate its HTML.
 plugin({ name: "vscode-stub", setup(build) {
   build.module("vscode", () => ({ loader: "object", exports: {
-    Uri: { joinPath: () => ({ toString: () => "" }) }, ViewColumn: { Active: 1 }, window: {}, env: {},
+    Uri: { joinPath: (_base: unknown, ...parts: string[]) => ({ path: parts.join("/") }) }, ViewColumn: { Active: 1 }, window: {}, env: {},
+    workspace: { getConfiguration: () => ({ get: (_key: string, fallback: unknown) => fallback }) },
     Disposable: { from: () => ({ dispose() {} }) },
     EventEmitter: class { event = () => ({ dispose() {} }); fire() {} dispose() {} }
   } }));
@@ -33,7 +34,7 @@ const config = { models: [{ key: "p|m", label: "unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M
 const provider = new ChatWindowProvider({ onDidChange: () => ({ dispose() {} }) }, async () => "", () => config, async () => [], undefined, { fsPath: "" });
 provider.selectedAgent = { id: agent, name: agentName };
 // markdown-it is loaded from the repo's media folder so answers render as they do in VS Code.
-const base: string = provider.html({ cspSource: "", asWebviewUri: () => "../media/markdown-it.min.js" });
+const base: string = provider.html({ cspSource: "", asWebviewUri: (uri: { path?: string }) => `../${uri.path ?? ""}` });
 
 const feedName = arg("feed") ?? "conversation";
 const feedPath = existsSync(feedName) ? resolve(feedName) : join(import.meta.dir, "feeds", `${feedName}.js`);

@@ -56,7 +56,11 @@ export class Workbench implements vscode.Disposable {
       vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, this.sidebar),
       vscode.window.registerWebviewPanelSerializer(TASK_PANEL_VIEW_TYPE, this.panels),
       activity.onDidChange(change => this.notify(["agents", "tasks", "health", "conversations"], change.rootTaskId ? [change.rootTaskId] : undefined)),
-      vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration("agentOrchestrator")) this.notify(["health"]); }),
+      vscode.workspace.onDidChangeConfiguration(event => {
+        // The robot model is baked into each page's runtime script tag, so open pages reload to pick it up.
+        if (event.affectsConfiguration("agentOrchestrator.robotModel")) { this.sidebar.reload(); this.overview.reload(); this.panels.reload(); }
+        if (event.affectsConfiguration("agentOrchestrator")) this.notify(["health"]);
+      }),
       vscode.window.onDidCloseTerminal(closed => { if (closed === this.terminal) this.terminal = undefined; }),
       vscode.commands.registerCommand("agentOrchestrator.openLatestTask", () => {
         const taskId = this.views.latestTaskId();

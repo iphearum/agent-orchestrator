@@ -18,6 +18,7 @@ The mascot is built **procedurally** from Babylon primitives, so there's no glTF
 | Avatar consumer + SVG fallback | `webview-ui/src/icons.tsx` → `RobotGlyph` |
 | Type of `window.AgentRobot3D` | `webview-ui/src/env.d.ts` (keep in sync with `RobotRuntime` in the runtime) |
 | Dev page | `webview-ui/dev.html` |
+| GLB bots: bake script, baked assets | `scripts/bake-bots.ts` → `media/bots/` (sources in `backend/src/bots/`); workflow in the glb-bot skill |
 
 Runtime contract. Keep it stable, because three surfaces depend on it:
 
@@ -29,6 +30,14 @@ window.AgentRobot3D = {
 ```
 
 `mount` must never throw. Callers treat `undefined` as "show the SVG fallback". The sprite is rendered once per webview and memoised, so don't create one engine per avatar.
+
+## GLB bots (jocy, ally, vally, meshy)
+
+GLB models in `backend/src/bots/` are baked by `scripts/bake-bots.ts` into `media/bots/` and skinned to this robot's rig, so they play every state and act. Users pick one with `agentOrchestrator.robotModel` (`default` | `jocy` | `ally` | `vally` | `meshy`). For converting a new GLB or fixing a bot's rigging, face or textures, use the **glb-bot** skill (`.codex/skills/glb-bot/`). When changing the runtime here, keep three things working for the bots:
+- `Robot.portrait()`: avatars collapse a bot's body instead of disabling meshes.
+- The face layers: `drawFace(ctx, w, h, face, glow, rig)` draws `drawEyes` then `drawMouth` on a `FaceRig`'s anchors (`DEFAULT_FACE_RIG` for this robot). Faces come from `EXPRESSIONS` presets (tag with `face.expression` / `express`), so new emotions belong there, not in ad-hoc eye and mouth assignments.
+- `Pose.lift` and `robot.locomotion` ("walk" | "fly" | "both"): `locomote` and the `fly` act. This robot walks.
+- The shared `animateHero` / `stageRobot` / `createStage`.
 
 ## Workflow
 

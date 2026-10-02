@@ -11,13 +11,15 @@ interface DesktopWorkbenchApi {
   onWorkbenchChanged(listener: (change: { scopes: Array<"agents" | "tasks" | "health" | "conversations">; taskIds?: string[] }) => void): () => void;
 }
 type RobotAnimationState = "idle" | "listening" | "thinking" | "working" | "talking" | "happy" | "error";
+/** "jocy" and "ally" are the baked Meshy bots in media/bots/, rigged to the procedural robot's animation. */
+type RobotModelName = "default" | "wanted" | "jocy" | "ally" | "vally" | "meshy" | "buddy" | "jarvis";
 interface Window {
   workbench?: DesktopWorkbenchApi;
   /** Procedural 3D robot (webview-ui/src/robot-runtime.ts), loaded as a separate script; absent without WebGL. */
   AgentRobot3D?: {
-    getAvatarSprite(model?: "default" | "wanted"): Promise<string | undefined>;
-    getAvatarSheet(state: RobotAnimationState, model?: "default" | "wanted"): Promise<{ url: string; frames: number; duration: number } | undefined>;
-    mount(canvas: HTMLCanvasElement, model?: "default" | "wanted"): (() => void) | undefined;
+    getAvatarSprite(model?: RobotModelName): Promise<string | undefined>;
+    getAvatarSheet(state: RobotAnimationState, model?: RobotModelName): Promise<{ url: string; frames: number; duration: number } | undefined>;
+    mount(canvas: HTMLCanvasElement, model?: RobotModelName): (() => void) | undefined;
   };
 }
 

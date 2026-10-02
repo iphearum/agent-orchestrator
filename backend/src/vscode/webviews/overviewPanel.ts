@@ -27,6 +27,9 @@ export class OverviewPanel implements vscode.Disposable, vscode.WebviewPanelSeri
 
   dispose() { this.open?.panel.dispose(); }
 
+  /** Re-render the page (e.g. after agentOrchestrator.robotModel changes). */
+  reload() { if (this.open) this.open.panel.webview.html = renderHtml(this.open.panel.webview, this.extensionUri, "overview", "Overview"); }
+
   private attach(panel: vscode.WebviewPanel) {
     panel.title = "Overview";
     panel.iconPath = { light: vscode.Uri.joinPath(this.extensionUri, "media", "agents-light.svg"), dark: vscode.Uri.joinPath(this.extensionUri, "media", "agents-dark.svg") };

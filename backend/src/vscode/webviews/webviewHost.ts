@@ -11,7 +11,37 @@ export class RpcError extends Error {
 }
 
 export function webviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
-  return { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, "dist", "webview")] };
+  // media/bots holds the baked GLB bots the robot runtime fetches when agentOrchestrator.robotModel picks one.
+  return { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, "dist", "webview"), vscode.Uri.joinPath(extensionUri, "media", "bots")] };
+}
+
+/** The 3D robot model the webviews should show (agentOrchestrator.robotModel), validated for use in HTML. */
+export function robotModelSetting(): string {
+  const model = vscode.workspace.getConfiguration("agentOrchestrator").get<string>("robotModel", "default");
+  return ["default", "jocy", "ally", "vally", "meshy", "buddy", "jarvis"].includes(model) ? model : "default";
+}
+
+const ROBOT_ASSET_FILES = [
+  "ally.bin", "ally-color.webp", "ally-emissive.webp", "ally-mr.webp", "ally-normal.webp",
+  "jocy.bin", "jocy-color.webp", "jocy-mr.webp",
+  "meshy.bin", "meshy-color.webp", "meshy-mr.webp", "meshy-normal.webp",
+  "vally.bin",
+  "buddy.bin", "buddy-color.webp", "buddy-emissive.webp", "buddy-mr.webp", "buddy-normal.webp",
+  "jarvis.bin", "jarvis-color.webp", "jarvis-emissive.webp", "jarvis-mr.webp", "jarvis-normal.webp"
+];
+
+/** Use explicit VS Code webview URIs for every baked bot asset; relative URLs can lose the webview's resource mapping. */
+export function robotAssetsAttribute(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+  const urls = Object.fromEntries(ROBOT_ASSET_FILES.map(file => [
+    file,
+    webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "media", "bots", file)).toString()
+  ]));
+  const encoded = JSON.stringify(urls)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return `data-robot-assets="${encoded}"`;
 }
 
 export function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, surface: Surface, title: string): string {
@@ -22,13 +52,13 @@ export function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, su
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource}; font-src ${webview.cspSource}; connect-src ${webview.cspSource}; script-src 'nonce-${nonce}' 'wasm-unsafe-eval';">
 <link rel="stylesheet" href="${asset("main.css")}">
 <title>${title.replace(/[<&"]/g, "")}</title>
 </head>
 <body>
 <div id="root" data-surface="${surface}"></div>
-<script nonce="${nonce}" src="${asset("robot-runtime.js")}"></script>
+<script nonce="${nonce}" src="${asset("robot-runtime.js")}" data-robot-model="${robotModelSetting()}" ${robotAssetsAttribute(webview, extensionUri)}></script>
 <script nonce="${nonce}" type="module" src="${asset("main.js")}"></script>
 </body>
 </html>`;
