@@ -12,7 +12,7 @@ interface DesktopWorkbenchApi {
 }
 type RobotAnimationState = "idle" | "listening" | "thinking" | "working" | "talking" | "happy" | "error";
 /** "jocy" and "ally" are the baked Meshy bots in media/bots/, rigged to the procedural robot's animation. */
-type RobotModelName = "default" | "wanted" | "jocy" | "ally" | "vally" | "meshy" | "buddy" | "jarvis";
+type RobotModelName = "default" | "wanted" | "jocy" | "ally" | "vally" | "meshy" | "buddy";
 interface Window {
   workbench?: DesktopWorkbenchApi;
   /** Procedural 3D robot (webview-ui/src/robot-runtime.ts), loaded as a separate script; absent without WebGL. */

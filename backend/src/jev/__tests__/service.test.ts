@@ -97,6 +97,17 @@ describe("task links and retrieval", () => {
     expect(facts[0].refs[0]).toMatch(/^entity:\/\//);
   });
 
+  it("ignores question filler when matching entity names", () => {
+    jev.recordFact({ sourceName: "Gateway", sourceType: "service", predicate: "uses_port", targetName: "8080" });
+    const filler = jev.upsertEntity("concept", "What does it do");
+
+    const { entities, facts } = jev.retrieve({ query: "What does the gateway do?" });
+
+    expect(entities.map(entity => entity.name)).toContain("Gateway");
+    expect(entities.map(entity => entity.id)).not.toContain(filler);
+    expect(facts.map(item => item.text)).toEqual(["Gateway --uses_port--> 8080"]);
+  });
+
   it("brings in what earlier turns of the same chat touched", () => {
     const fileId = jev.linkFile("task-1", "src/auth/login.ts", "edited")!;
     jev.recordFact({ sourceName: "src/auth/login.ts", sourceType: "file", predicate: "calls", targetName: "session store" });

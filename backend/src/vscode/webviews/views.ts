@@ -289,9 +289,22 @@ export class WorkbenchViews {
     }
     const edges: FlowView["edges"] = [];
     const seen = new Set<string>();
+    const nodeIds = new Set(nodes.map(node => node.id));
     const add = (from: string, to: string, type: string) => {
       const key = `${from}>${to}`;
-      if (from === to || seen.has(key)) return;
+      if (from === to || seen.has(key) || !nodeIds.has(from) || !nodeIds.has(to)) return;
+      // Agent messages can contain a back-edge when a hand-off is rejected or agents consult
+      // an earlier caller. Keep the rendered flow a DAG so layer relaxation cannot push nodes
+      // farther right on every pass and leave a single edge running off the canvas.
+      const pending = [to];
+      const visited = new Set<string>();
+      while (pending.length) {
+        const current = pending.pop()!;
+        if (current === from) return;
+        if (visited.has(current)) continue;
+        visited.add(current);
+        for (const edge of edges) if (edge.from === current) pending.push(edge.to);
+      }
       seen.add(key);
       edges.push({ from, to, type });
     };
@@ -319,6 +332,7 @@ export class WorkbenchViews {
       subtitle: root.result ? oneLine(root.result, 60) : running ? "In progress" : "No result yet",
       state: rootStatus === "completed" ? "done" : rootStatus === "blocked" ? "failed" : running ? "pending" : "failed"
     });
+    nodeIds.add("result");
     // The result is drawn from the end of the chain, as in the design (… → Reviewer → Result): the agents that hand
     // no work on. Their answers flow back up to the root agent, which writes the reply.
     const ends = [...layers.keys()].filter(agentId => !edges.some(edge => edge.from === `agent:${agentId}`));

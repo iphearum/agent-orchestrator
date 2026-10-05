@@ -57,6 +57,7 @@ const bones: Array<{ name: string; parent?: string; at: V3 }> = [
 ];
 for (const [i, s] of [[0, "-1"], [1, "+1"]] as const) {
   bones.push({ name: `arm${s}`, parent: "upper", at: rig.shoulder[i] }, { name: `forearm${s}`, parent: `arm${s}`, at: rig.elbow[i] });
+  if (header.bones.includes(`hand${s}`)) bones.push({ name: `hand${s}`, parent: `forearm${s}`, at: rig.wrist[i] });
   bones.push({ name: `thigh${s}`, parent: "root", at: rig.hipJoint[i] }, { name: `shin${s}`, parent: `thigh${s}`, at: rig.knee[i] }, { name: `foot${s}`, parent: `shin${s}`, at: rig.ankle[i] });
 }
 const kept = bones.filter(b => !/^(thigh|shin|foot)/.test(b.name) || used.has(header.bones.indexOf(b.name)));

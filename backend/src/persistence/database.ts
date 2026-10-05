@@ -7,6 +7,9 @@ import { AgentDefinition, MemoryType, TraceKind } from "../core/types";
 export interface TaskRecord { id: string; parentId?: string; rootId: string; ownerAgentId: string; instruction: string; status: string; result?: string; depth: number; }
 export interface RelatedConversationContext { conversationId: string; context: string; score: number; }
 
+const RETRIEVAL_STOP_WORDS = new Set(["about", "after", "again", "also", "and", "are", "been", "before", "but", "can", "could", "did", "does", "doing", "for", "from", "had", "has", "have", "how", "into", "its", "just", "more", "most", "not", "our", "out", "over", "same", "some", "than", "that", "the", "their", "them", "then", "there", "these", "they", "this", "those", "was", "were", "what", "when", "where", "which", "who", "why", "with", "would", "you", "your"]);
+const retrievalTokens = (text: string) => [...new Set((text.toLowerCase().match(/[\p{L}\p{N}_./-]{3,}/gu) ?? []).filter(term => !RETRIEVAL_STOP_WORDS.has(term)))];
+
 /** SQLite is the authoritative runtime store. Vector indexes, when added, remain optional projections. */
 export class AgentDatabase {
   private readonly db: DatabaseSync;
@@ -38,6 +41,7 @@ export class AgentDatabase {
       CREATE TABLE IF NOT EXISTS agent_messages (id TEXT PRIMARY KEY, sender_agent_id TEXT, receiver_agent_id TEXT, type TEXT NOT NULL, payload_json TEXT, task_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS tool_runs (id TEXT PRIMARY KEY, conversation_id TEXT, task_id TEXT, agent_id TEXT, tool_name TEXT NOT NULL, arguments_json TEXT, result_json TEXT, summary TEXT, status TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS summaries (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, start_message_id TEXT, end_message_id TEXT, summary TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS memory_vectors (memory_id TEXT PRIMARY KEY, embedding_model TEXT NOT NULL, vector_json TEXT NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS traces (id TEXT PRIMARY KEY, conversation_id TEXT, task_id TEXT, agent_id TEXT, kind TEXT NOT NULL, data_json TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS queue_runs (id TEXT PRIMARY KEY, label TEXT NOT NULL, status TEXT NOT NULL, error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
       CREATE INDEX IF NOT EXISTS idx_memories_agent ON memories(agent_id, active, created_at);
@@ -71,8 +75,8 @@ export class AgentDatabase {
     if (!toolRunColumns.some(column => column.name === "task_id")) this.db.exec("ALTER TABLE tool_runs ADD COLUMN task_id TEXT");
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_tool_runs_task ON tool_runs(task_id, created_at)");
     const version = this.db.prepare("SELECT version FROM schema_version LIMIT 1").get() as { version?: number } | undefined;
-    if (!version) this.db.prepare("INSERT INTO schema_version(version) VALUES (3)").run();
-    else if ((version.version ?? 0) < 3) this.db.prepare("UPDATE schema_version SET version = 3").run();
+    if (!version) this.db.prepare("INSERT INTO schema_version(version) VALUES (4)").run();
+    else if ((version.version ?? 0) < 4) this.db.prepare("UPDATE schema_version SET version = 4").run();
   }
 
   seedAgents() {
@@ -132,11 +136,15 @@ export class AgentDatabase {
   }
 
   /** Store an extractive structured summary and trim only the active prompt window; raw messages remain intact. */
-  compressConversation(conversationId: string, keepRecent = 12) {
+  compressConversation(conversationId: string, keepRecent = 12, maxActiveChars = 18_000) {
     const safeKeep = Math.max(4, Math.min(40, Math.trunc(keepRecent) || 12));
     const rows = this.db.prepare("SELECT id,role,content FROM messages WHERE conversation_id=? AND active_context=1 ORDER BY rowid").all(conversationId) as Array<{ id: string; role: string; content: string }>;
-    if (rows.length <= safeKeep) return false;
-    const archived = rows.slice(0, rows.length - safeKeep);
+    const safeCharLimit = Math.max(4_000, Math.trunc(maxActiveChars) || 18_000);
+    let activeChars = rows.reduce((sum, row) => sum + row.content.length, 0);
+    let archiveCount = Math.max(0, rows.length - safeKeep);
+    while (archiveCount < rows.length - 4 && activeChars > safeCharLimit) activeChars -= rows[archiveCount++].content.length;
+    if (!archiveCount) return false;
+    const archived = rows.slice(0, archiveCount);
     const recentSummary = this.db.prepare("SELECT end_message_id FROM summaries WHERE conversation_id=? ORDER BY rowid DESC LIMIT 1").get(conversationId) as { end_message_id: string | null } | undefined;
     if (recentSummary?.end_message_id === archived[archived.length - 1].id) return false;
     const grouped = new Map<string, string[]>();
@@ -174,15 +182,31 @@ export class AgentDatabase {
     const source = sourceMessageId ?? (conversationId ? (this.db.prepare("SELECT id FROM messages WHERE conversation_id=? AND role IN ('user','result') ORDER BY rowid DESC LIMIT 1").get(conversationId) as { id: string } | undefined)?.id : undefined);
     this.db.prepare("INSERT INTO memories(id,agent_id,conversation_id,type,content,source_message_id) VALUES(?,?,?,?,?,?)").run(randomUUID(), scope === "project" ? null : agentId, conversationId ?? null, type, content, source ?? null);
   }
-  recentMemories(agentId: string, limit = 8, query = ""): string[] {
+  memoryCandidates(agentId: string, limit = 100): Array<{ id: string; content: string }> {
+    return this.db.prepare("SELECT id,content FROM memories WHERE active=1 AND (agent_id=? OR agent_id IS NULL) ORDER BY created_at DESC LIMIT ?")
+      .all(agentId, Math.max(1, Math.min(500, limit))) as Array<{ id: string; content: string }>;
+  }
+  recentMemories(agentId: string, limit = 8, query = "", relatedTerms: string[] = [], vectorScores: Map<string, number> = new Map()): string[] {
     const rows = this.db.prepare("SELECT id,content,importance,confidence,created_at FROM memories WHERE active=1 AND (agent_id=? OR agent_id IS NULL) ORDER BY created_at DESC LIMIT 100").all(agentId) as Array<{ id: string; content: string; importance: number; confidence: number; created_at: string }>;
-    const terms = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}_-]{3,}/gu) || [])];
+    const terms = retrievalTokens(query);
+    const graphTerms = retrievalTokens(relatedTerms.join(" "));
+    const hasVectors = vectorScores.size > 0;
     return rows.map(row => {
-      const text = row.content.toLowerCase();
-      const matches = terms.reduce((n, term) => n + (text.includes(term) ? 1 : 0), 0);
-      const score = (matches / Math.max(1, terms.length)) * 2 + (row.importance || .5) * .35 + (row.confidence || 0) * .15;
-      return { ...row, score };
-    }).filter(row => !terms.length || terms.some(term => row.content.toLowerCase().includes(term))).sort((a, b) => b.score - a.score || b.created_at.localeCompare(a.created_at)).slice(0, Math.max(1, limit)).map(row => row.content);
+      const content = new Set(retrievalTokens(row.content));
+      const lexical = terms.length ? terms.filter(term => content.has(term)).length / terms.length : 0;
+      const graph = graphTerms.length ? graphTerms.filter(term => content.has(term)).length / graphTerms.length : 0;
+      const semantic = Math.max(0, Math.min(1, ((vectorScores.get(row.id) ?? -1) + 1) / 2));
+      const quality = Math.max(0, Math.min(1, (row.importance || .5) * .6 + (row.confidence || 0) * .4));
+      const created = Date.parse(`${row.created_at.replace(" ", "T")}Z`);
+      const ageDays = Number.isFinite(created) ? Math.max(0, (Date.now() - created) / 86_400_000) : 180;
+      const recency = Math.exp(-ageDays / 180);
+      const relevance = hasVectors
+        ? lexical * .34 + graph * .22 + semantic * .26 + recency * .09 + quality * .09
+        : lexical * .52 + graph * .28 + recency * .1 + quality * .1;
+      return { ...row, relevance, lexical, graph, semantic };
+    }).filter(row => !terms.length && !graphTerms.length && !hasVectors || row.lexical > 0 || row.graph > 0 || vectorScores.has(row.id))
+      .sort((a, b) => b.relevance - a.relevance || b.created_at.localeCompare(a.created_at))
+      .slice(0, Math.max(1, limit)).map(row => row.content);
   }
   memoriesFromConversations(agentId: string, conversationIds: string[], limit = 6): string[] {
     const ids = [...new Set(conversationIds)].slice(0, 8);

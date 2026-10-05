@@ -22,21 +22,26 @@ The bone order is fixed (`BONES` in `scripts/bake-bots.ts`, carried in the `.bin
 
 ```
 0 root  1 upper  2 head  3 antenna  4 arm-1  5 forearm-1  6 arm+1  7 forearm+1
-8 thigh-1  9 shin-1  10 foot-1  11 thigh+1  12 shin+1  13 foot+1
+8 thigh-1  9 shin-1  10 foot-1  11 thigh+1  12 shin+1  13 foot+1  14 hand-1  15 hand+1
+16 index-1  17 index+1  18 middle-1  19 middle+1  20 thumb-1  21 thumb+1
 ```
+
+Finger bones are only skinned on a bot with `handTransplant` (Jarvis); `rig.fingers` in the header lists their knuckle pivots, curl axes and tips.
+
+The hands come last so older `.bin` files (14 bones) still load: the runtime maps joints by the header's own `bones`.
 
 `buildBot` builds the same pivot hierarchy as `buildRobot`:
 
 ```
 root ─ upper (pivot rig.hip) ─ neck (pivot rig.neck) ─ head ─ antenna (pivot rig.antenna)
-     │                       └ arm±1 (pivot shoulder) ─ forearm±1 (pivot elbow)
+     │                       └ arm±1 (pivot shoulder) ─ forearm±1 (pivot elbow) ─ hand±1 (pivot wrist) ─ index/middle/thumb±1 (pivot knuckle)
      └ thigh±1 (pivot hipJoint) ─ shin±1 (pivot knee) ─ foot±1 (pivot ankle)
 ```
 
 - **Rest pose:** every node sits at the origin with a pivot point, so its rest matrix is identity. The skin's bind pose is therefore the baked mesh itself, and nothing needs an inverse bind.
 - **Bones:** one parentless Babylon `Bone` per bone name. In `scene.onBeforeRenderObservable`, each bone's local matrix becomes its node's world matrix × the inverse of the root's world matrix. The nodes are computed parent-first, then each bone is marked dirty.
 - **Why not `linkTransformNode`:** Babylon's linked bones copy the node's local position and rotation and ignore pivot points, so the hierarchy would rotate about the wrong places.
-- **Wrist and hand:** there is no wrist bone. The hand is part of the forearm, which is enough for the runtime's poses because the procedural robot's claws only add finger detail.
+- **Wrist and hand:** every bot has a `hand±1` bone. The bake relabels forearm vertices past the plane through `rig.wrist` (normal along elbow → wrist) as the hand and blends them across a wrist joint, so no `classify` needs hand rules; put `wrist` at the cuff's centre. At runtime the hand flexes with `ArmPose.grip` (`rotation.x = 0.9 × grip`: closing curls it forward) and follows a wave (`rotation.z = 0.45 × wave`). Sculpted fingers are fused into one piece, so they move with the hand rather than one by one.
 
 ## 3. What the bake does, in order
 
@@ -44,6 +49,7 @@ root ─ upper (pivot rig.hip) ─ neck (pivot rig.neck) ─ head ─ antenna (p
 2. **Normalise** to `HEIGHT` and apply `KHR_texture_transform` (offset + scale) to the UVs.
 3. **Merge** vertices that share a position (and UV when textured) with normals within ~25°, averaging the normals. Exporters split vertices on tiny normal differences (Vally: 124k vertices on 60k positions), and split vertices are locked seams to the simplifier. Then **simplify** when `triangles` is set: meshoptimizer `simplifyWithAttributes` (normals as attributes, seams kept), then compact unused vertices.
 4. **Classify** each vertex with `classify(p, rig, lum)`, where `lum` comes from sampling the base-colour texture at its UV.
+4b. **Mirror** (`mirror: { from, plane }`): triangles touching the head or antenna stay; of the rest, those on side `from` of x = `plane` are kept and copied mirrored (x → 2·plane − x, normal x negated, winding flipped, same UVs, labels swapped −1 ↔ +1); the other side is dropped. Source vertices on the midline cut are snapped onto the plane and shared with their copy, so the halves weld shut. The rig's side pivots are mirrored the same way. Where the mirrored shoulders meet the kept head (under the helmet), a few open edges are expected.
 5. **Blend joints.** For each joint (parent → child, pivot, axis from the pivot into the child, lateral reach), a vertex labelled with either part that lies within `band` of the pivot along the axis, and within `reach` of it sideways, gets `smoothstep` weights between the two parts. At most two influences per vertex.
 5b. **Smooth skinning** (`smooth`): Laplacian diffusion of the weights on the position+label-merged vertex graph. A vertex only takes weight from its own part and parts it shares a joint with. Edges between parts only carry weight within `max(0.9, 1.5 × reach)` of their joint's pivot. Iterations = (width / mean edge)², capped at 400. Three strongest influences are kept. Nodes are merged by label too: brightness-based labels can differ across a UV seam, and merging them gave a thigh vertex forearm weights (Jocy's streak).
 6. **Drop bridges.** Meshy and other remeshers weld touching parts into one surface (hands into thighs, boot to boot). A triangle whose corners belong to parts with no joint between them would stretch into a streak, so it is removed. The bake prints these as `bridges dropped: A × B count @ position`.
@@ -97,6 +103,8 @@ Sizes after version 2 and the vertex merge: vally 4.18 → 0.97 MB, meshy 1.56 �
 | arm+1 / forearm+1 | blue / light blue |
 | thigh-1 / shin-1 / foot-1 | green / light green / dark green |
 | thigh+1 / shin+1 / foot+1 | purple / lilac / dark purple |
+| hand-1 / hand+1 | orange / cyan |
+| index / middle / thumb (−1 / +1) | yellow / pale yellow, brown / tan, navy / periwinkle |
 | caps (added by the bake) | the colour of their part |
 
 The four panels are front, from −X (the bot's left side), back, and from +X (its right side).

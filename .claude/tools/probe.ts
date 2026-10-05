@@ -28,7 +28,6 @@ const MOTION = process.argv[3] === "--motion" ? (process.argv[4] ?? "giggle") : 
 const SEED = Number(process.argv[5] ?? 1);
 const PATHS = process.argv[3] === "--paths";
 const FIT = process.argv[3] === "--fit";
-// --zoom <shot> [y] [scale]: the shot close up from four sides (cracks, seams), aimed at height y.
 const ZOOM = process.argv[3] === "--zoom" ? { shot: process.argv[4] ?? "idle", y: Number(process.argv[5] ?? 4.2), scale: Number(process.argv[6] ?? 0.42), x: Number(process.argv[7] ?? 0) } : undefined;
 const only = STRETCH || FACES || MOTION || PATHS || FIT || ZOOM ? undefined : process.argv[3];
 const [W, H] = ZOOM ? [620, 620] : FIT ? [170, 300] : only === "labels" ? [300, 540] : only ? [520, 940] : MOTION ? [200, 360] : [150, 270];
@@ -101,7 +100,6 @@ const show = (canvas: HTMLCanvasElement, w: number, h: number, caption: string, 
     const pose = make();
     for (const [yaw, label] of [[0, "front"], [Math.PI / 2, "from -X"], [Math.PI, "back"], [-Math.PI / 2, "from +X"]] as const) {
       applyPose(robot, clonePose(pose), pose, 1);
-      // Aim at x = zoom.x on the bot, wherever the turn carries it.
       robot.root.rotation.y = yaw; cam.target.x = zoom.x * Math.cos(yaw); cam.target.z = -zoom.x * Math.sin(yaw); scene.render();
       show(canvas, ${W}, ${H}, zoom.shot + " " + label);
     }

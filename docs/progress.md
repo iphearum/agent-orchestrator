@@ -1,5 +1,85 @@
 # Progress
 
+2026-10-05 13:26 +07 [vsix-review] Memory diagram maps to SQLite memories, JEV retrieval and optional vectors; compile and VSIX package pass. Four tests fail (one hand-off status mismatch; three Windows process/cleanup issues); publisher is still `local`, README is deleted, and repository AGENTS.md was excluded from the package.
+
+2026-10-03 23:49 +07 [bots-removed] Removed Jarvis and Ironman from the picker, model settings, runtime roster and packaged assets; old saved selections fall back to Default. Typecheck, webview build and VSIX package pass; package contains neither bot.
+
+2026-10-03 22:02 +07 [ironman-hand-paint] Recolored both hand and finger armor gold using bone labels; kept palm repulsor cyan/white. Bake paints 20,036 gold triangles; working render, build and typecheck pass.
+
+2026-10-03 22:00 +07 [ironman-hand-paint] Matched repulsor hand to reference: red glove, cyan rim and larger white center; measure repulsor radius across its face plane. 297 glow / 52 core triangles; working render, build and typecheck pass.
+
+2026-10-03 21:51 +07 [ironman-head-paint] Final pass removed stepped coordinate masks: 5,549 red/gold art seeds now spread along relief for the helmet seam; calibrated brighter red and paler gold. Head relief has 0 open edges; close-up render, build and typecheck pass.
+
+2026-10-03 21:47 +07 [ironman-head-paint] Re-baked head colors with separate pale-gold faceplate and brighter red shell; tapered the faceplate mask along the relief seam. 0 open edges; idle render, webview build and typecheck pass.
+
+2026-10-03 21:15 +07 [ironman-eyes] Enlarged, re-spaced and raised the cyan-rimmed white eye slits to match the reference. Face-expression and full-model probes rendered; webview build/typecheck pass.
+
+2026-10-03 17:46 +07 [ironman-paint] Final bake: 5,549 reference seeds; 12,769 gold, 61,911 red, 202 cyan, 32 core, 82 steel triangles; 0 color-edge splits and 0 relief open edges. Hero yaw/flight mode tuned; 20-pose stretch probe has no tears (max ×2.79). Webview build/typecheck pass; idle and working renders inspected.
+
+2026-10-03 17:41 +07 [ironman-paint] Corrected bright-gold seed rejection; explicit relief-aware face/thigh boundaries now paint full plates. Split repulsors into cyan rings and pale cores; hero yaw fitted to reference; flight locomotion and gentler motion. Probe: no tears in 20 shots; webview build/typecheck pass; idle/working inspected. Long hero-fit run stopped.
+
+2026-10-03 17:22 +07 [ironman-paint] Re-baked Iron Man with the relief-guided block painter: 4,629 reference seeds, clean red/gold/steel plate spread, 88 colour-boundary splits, 0 capped holes; crop fit IoU 0.949. Head relief inspected; 18 existing open edges remain. Escalated local probe rendered successfully; color blocks follow helmet, chest, hand and thigh plates.
+
+2026-10-03 19:30 +07 [ironman-paint] Block paint ignores the art's lighting: shadows, white highlights, blue metal reflections and cyan bloom cast no votes; steel only from neutral grey; glow only from the measured palm/reactor discs (palm disc tightened). Result: plain red shell, gold faceplate + stripe, gold thigh plates, steel knee discs, clean glow discs, no reflection blotches. Tried and dropped: angle/groove flood-fill plates and cell-majority (decimated grooves don't close; faceplate edge is a step). Left: slightly ragged gold edges on the inner thighs. Stretch unchanged; typecheck passes.
+
+2026-10-03 18:40 +07 [ironman-paint] Colour + block paint: ACES tone mapping crushed the art's reds (green → 0), so `paint.project` bots get header `art` and the runtime draws them untone-mapped (exposure 1; front within ~±10% of the art). New `project.blocks`: art-seeded, groove-aware least-cost fill + smoothing paints per sculpted plate (faceplate gold with red stripe, eye slits glow, reactor/palm steel rings, knee discs, thigh plates); ironman now uses it (flat palette, 0.60 MB bin). Left: white shards where the palm disc clips finger bases, ragged gold on inner thighs. Stretch unchanged; typecheck passes.
+
+2026-10-03 17:40 +07 [ironman-paint] Ironman painted from its reference art: new `paint.project` in the bake (perspective camera → depth-tested projected UVs into the cropped art, background filled, palette strip for unseen/edge-on surfaces, minFacing 0.5, glow discs kept flat) and `project-fit.ts` (silhouette fit, IoU 0.95). Front now shows the art's gloss, panel lines and glows; sides/back keep tuned swatches. Assets 0.61 → 0.88 MB (bin 0.72, color/mr/emissive webp 0.16). Stretch unchanged (10 of 22); typecheck passes. Reference saved as backend/src/bots/ironman-ref.png (not packaged).
+
+2026-10-03 17:05 +07 [ironman-paint] Repainted ironman from the reference art: champagne gold (sampled), brighter red, gold faceplate rising either side of the sculpted red forehead stripe up to the helmet seam, steel-grey knee discs (unused `dark` swatch → `steel`). Probe mid-tones now within ~8 levels of the art. ironman.bin still 0.61 MB; stretch unchanged (10 of 22 poses, same small tears).
+
+2026-10-03 16:14 +07 [glb-bot] Skill improvements from meshy-mcp-server: `references/meshy.md` (bake-friendly generation settings: A-pose not T-pose, smart-topology, ~70k tris, remove_lighting, PBR; costs and confirm-first; rig/remesh/retexture flows); new `scripts/skeleton.ts` (Meshy/Mixamo skin → draft `rig` in baked units, arm-angle check, `--rigged` collapses weights onto BONES for the rigged-input bake); glb-info drops the stale rotation warning, points skins to skeleton.ts and flags the 300k rig limit. Tested on a Mixamo-renamed jocy export: all pivots match CONFIG.jocy. Mirrored to `.codex`.
+
+2026-10-03 15:21 +07 [ironman-paint] Painted ironman with red armor, gold face/thigh plates, and cyan eyes/reactors; palette textures and ironman.bin (0.61 MB) baked. Runtime probe, webview build, and typecheck pass.
+
+2026-10-03 15:16 +07 [ironman-verify] Ironman fixes: shoulder pads kept on the body and the chin moved below the faceplate (shards gone), sideways shoulder axis, smooth 0.6, arm raise capped 0.75 and motion 0.7; wider hero margins (fit: all 30 runs inside); `FaceRig.avatarBeta` 1.85 so portraits look into the faceplate. Stretch: 10 of 22 poses with ≤31 torn triangles, worst behind the drawn-back −X shoulder when it swings to the chin. Typecheck passes.
+
+2026-10-03 14:55 +07 [ironman-bot] New `ironman` bot from `backend/src/bots/ironman.glb` (untextured 875k-triangle chibi Iron Man in a flying lunge): bake reads its node matrix, welds by position (`weldDot: -1`, its 8-bit normals blocked the simplifier) and decimates to 75k; capsule labels from measured joints; its own open hand rigged in place (`fingers`: thumb/index/middle/ring bones). New bake `paint` for untextured models: per-point region rule, triangles split exactly at colour boundaries, palette texture: red armour, gold faceplate and thigh plates, cyan chest reactor and palm repulsor (emissive). Registered in the chat robot picker and webview assets. ironman.bin 0.61 MB + 3 tiny palette textures.
+
+2026-10-03 14:31 +07 [jarvis-donor-hand] Jarvis's hands now come from `backend/src/bots/ironman.glb` (untextured chibi Iron Man): bake `handTransplant.donor` loads it (full node matrix), clips its open +X hand in front of the gauntlet (z > 2.62), closes the back with a domed plate, decimates to 14.5k triangles and paints it with Jarvis texels (crimson shell, cyan palm repulsor). Laid along the forearm by the hand's own axis (palm base → fingers), roll 1.57 (palm to thigh, thumb forward), sunk 0.25 under the cover; thumb/index/middle/ring each on a bone (`ring±1` added). Fingers stay spread. jarvis.bin 1.08 MB.
+
+2026-10-03 13:50 +07 [jarvis-wrist] Hand–cover connection: source hand cut 0.1 past its wrist (no gauntlet shards) and sunk 0.25 under the cover; wrist cut rims left uncapped (`capped 0 holes`, no pale plates). Fingers stay spread: rest curl 0, closing grip flexes ≤ 0.15 rad, opening bends back ≤ 0.2 (`FINGER_RANGE`). jarvis.bin 0.82 MB.
+
+2026-10-03 13:40 +07 [jarvis-cover] Gauntlet cover restored over the hands: bake `cover` cuts the −X fist out from under the cover's level rim (y 3.78) and outer side plate (x < −3.27) instead of at the tilted wrist plane, relabels the kept shell as forearm; the transplanted hand sits under it (roll 0 kept: ±90° put the index through the thigh or opened the wrist). Relief 60 open edges, all under the cover; stretch unchanged; `probe.ts --zoom` takes an x aim.
+
+2026-10-03 13:30 +07 [jarvis-hands] Hands follow the original design: bake `handTransplant` copies the sculpt's open +X hand (textured armour fingers, palm repulsor) onto both wrists in place of the fused fist, with new `index`/`middle`/`thumb` ±1 bones (pieces beyond the palm radius, knuckle pivots and curl axes in `rig.fingers`); runtime curls them with `grip` (`FINGER_CURL`). Procedural hands, wrist collar and header `cuffs` removed. jarvis.bin 0.82 MB; stretch unchanged (no tears at the hands); relief 72 open edges, all at the wrist rims (not visible at close zoom).
+
+2026-10-03 14:21 +07 [jarvis-hand-reference] Matched the reference palm repulsor: centered the raised disc/ring on the palm face and corrected the disc axis so the cyan core reads face-on. Webview build and typecheck pass; probe render blocked by nested Bun spawn EPERM.
+
+2026-10-03 13:20 +07 [jarvis-cracks] Jarvis crack pass: mirror now runs after `headPose` and includes the head (no seam between mirrored collar and turned helmet; chin/back-of-neck shards gone); `dropHands` clips the fists at the wrist plane instead of dropping a sawtooth of triangles (starburst caps gone) and records each opening (`cuffs` in the .bin header), where the runtime adds a crimson wrist collar; arm raise cap 1.2 → 1.0. Relief: 24 open edges, all on the wrist rims under the collars. Stretch: 9 of 22 poses with 4–17 torn triangles, all under the helmet's back rim or under the shoulder pads (raised arms). New `probe.ts --zoom <shot> [y] [scale]` close-ups.
+
+2026-10-03 13:10 +07 [jarvis-hands] Jarvis gets articulated gauntlet hands (from the source renders): bake `dropHands` removes the fused fists, runtime `BOT_HANDS`/`buildBotHand` builds a glossy crimson palm with silver-ringed repulsor, four tapered 3-joint fingers and a 2-joint thumb on each `hand±1` bone; knuckles curl with `grip` (relaxed at rest, fist when closing, flat when opening). jarvis.bin 0.77 → 0.71 MB; `--fit` all 30 runs inside (9 px); typecheck passes.
+
+2026-10-03 12:30 +07 [bots-symmetry] Bake `mirror` option: Jarvis's body rebuilt from its −X side (fist arm, planted leg), so both sides share one sculpt, rig and arm range; runtime Jarvis one-sided framing hacks removed. New `hand±1` bones (wrist pivot, split from forearm in the bake) on all six bots; hands flex with `grip` and follow waves. All bots re-baked (bins +1–2%: jarvis 0.77, jocy 0.17, ally 0.76, vally 0.98, meshy 0.75, buddy 0.84 MB). Typecheck passes.
+
+2026-10-03 11:59 +07 [jarvis-eyes] Moved Jarvis live slits up and inward, and reduced their size to align with the sculpted eye slots. Webview build and typecheck pass; visual probe is blocked by nested Bun spawn EPERM.
+
+2026-10-03 11:55 +07 [jarvis-picker] Added Jarvis to the chat robot QuickPick and rebuilt `agent-orchestrator-0.1.0.vsix`; package no longer includes stale unregistered migration output. `bun run package` passes. Headless UI screenshot was blocked because Chrome process spawn returned EPERM.
+
+2026-10-03 11:51 +07 [package-build] Package compile was blocked by unregistered migration 019 entering the TypeScript project. Excluded draft migrations from runtime compilation; `bun run compile`, `bun run typecheck`, and VSIX packaging to a temporary output all pass. Existing VSIX artifact left untouched.
+
+2026-10-03 11:30 +07 [hybrid-retrieval-context] Added lexical + JEV entity-overlap memory ranking, opt-in OpenAI-compatible embeddings with a rebuildable SQLite vector projection, retrieval/context traces, and auto-compaction by message count or 65% of configured context budget. Source typecheck passes when excluding the pre-existing untracked migration 019; normal typecheck still fails on that draft.
+
+2026-10-03 11:09 +07 [jev-retrieval] JEV now filters common question filler and ranks entity-name matches above metadata mentions; regression test passes. Full typecheck still hits existing errors in untracked migration 019.
+
+2026-10-03 11:05 +07 [migration-dir-review] Confirmed backend/src/migrations contains only an untracked 019 draft; the extension still runs inline schema v3 and never discovers it. Draft SQL is incompatible with SQLite and current schema.
+
+2026-10-03 11:02 +07 [plan-review] Audited pasted Codex-like plan: it mixes legacy Python paths with the target TypeScript extension; migration 019 is unregistered and its SQL/schema and TS exports are invalid. No implementation applied.
+
+2026-10-03 11:00 +07 [flow-cycle] Agent Flow now drops hand-offs that create cycles or reference missing nodes, keeping layer layout bounded; webview typecheck and theme screenshots pass. Full typecheck is blocked by existing migration 019 duplicate exports/type error.
+
+2026-10-03 10:37 +07 [self-handoff] Stale self-directed hand-off calls are now ignored and returned to the model as guidance without a red failed activity row; typecheck passes.
+
+2026-10-03 10:02 +07 [robot] Jarvis eyes moved into the sculpt's eye slots under the brow ridge (per the Iron-Man sketch reference); on the brow lip they were squashed into flat bars. `glowOff` ink now dark slot (24, 27, 32) instead of plate grey; eyes 23% / 76% across, ~63% down, size 0.2 (outer tips smeared where the plate turns away). Build + typecheck pass.
+
+2026-10-03 09:41 +07 [robot] Jarvis helmet matched to the Iron-Man front reference: faceplate plane measured level after `headPose` (0.7° yaw, −0.8° pitch). The painted eye slits sit ~0.5 deep under the brow and glowed as a grin, so the new bake `glowOff` repaints head glow paint in plate grey (726 texels) and drops it from the emissive; runtime covers removed, live slit eyes under the brow are the only eyes. Hero fit: all 30 runs inside (Jarvis flight margin 1.5, symmetric frame). Build + typecheck pass.
+
+2026-10-03 09:41 +07 [robot] Kept Vally's visor face-on in the hero view: flying bots use a front base angle and sway through the idle turn-around instead of yawing away. Webview build (1.78 MB) and typecheck pass; fresh turn-around render reports no script errors and keeps both eyes visible.
+
+2026-10-03 09:29 +07 [robot] Jarvis head levelled: the sculpt looked down at its pointing hand (visor ~23° down, ~22° aside). New bake `headPose` re-sculpts the rest pose (pitch −0.36, yaw −0.36 about a pivot under the helmet's back rim; vertices move by head weight, welded copies together, face spec follows). Runtime head attitude back to the shared default; `faceYaw` 0.02. Relief 0 open edges; stretch unchanged (7/22, small shoulder/collar crevice clusters); faces look straight at the camera; build + typecheck pass.
+
+2026-10-02 23:56 +07 [robot] Jarvis face corrected to the Iron-Man references: live eyes moved up under the red forehead panel and closer together (they sat on the low painted slits and read as a grin), bolder slit shape (pointed tip, sloping brow, blunt inner end, ~3.4:1), stronger glow; new `FaceRig.cover` paints the low painted slits over in plate grey. Face rect 1.75×0.9 centred y 6.3 (re-baked). All 21 presets read; webview build + typecheck pass.
+
 2026-10-02 18:22 +07 [robot] Jarvis face orientation and hand action refinement. Lifted/turned the helmet toward the chat camera, moved the live eye slits slightly up, and made `check-hand` transition from fist to pointing hand. Full pose render, webview build (1.78 MB runtime) and typecheck pass; relief has 0 open edges. Stretch probe flags 7/22 poses (max ×4.63 in small shoulder/neck triangle groups), with no obvious tears in the rendered sheet. Source GLB has no finger joints, so each hand keeps its sculpted gesture.
 
 2026-10-02 18:20 +07 [robot] Baked Jarvis (Iron-Man chibi) from `backend/src/bots/jarvis.glb` (24.9 MB, 1.16M tris) → `media/bots/jarvis.bin` 0.77 MB (75k tris) + color/mr/normal/emissive WebP; registered in runtime, `robotModel` setting, asset allowlist.

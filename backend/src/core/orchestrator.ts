@@ -10,6 +10,7 @@ import { describeFound, FIND_TOOLS_SCHEMA, rankTools, toFunctionName, toFunction
 import { fallbackTeamPlan, mayNeedTeam, type TeamPlan, type TeamPlanTask } from "./teamIntent";
 import { JevService } from "../jev/service";
 import { normalizeWorkspaceArgs } from "../tools/fileView";
+import { SqliteVectorStore } from "../storage/vector/sqliteVectorStore";
 
 export interface RunEvent {
   type: "start" | "message" | "chunk" | "thinking_chunk" | "thinking_message" | "stream_reset" | "delegate" | "tool" | "result" | "error";
@@ -32,6 +33,7 @@ export interface OrchestratorConfig {
   maxDelegationsPerTask: number;
   contextRecentMessages: number;
   contextMaxTokens?: number;
+  vectorEnabled?: boolean;
   automaticExecutionConfidence?: number;
   contextEnrichmentConfidence?: number;
   /** Agents started by hand-offs and teams in one request, across every level; keeps fan-out bounded. */
@@ -85,8 +87,10 @@ export class Orchestrator {
   /** Agents started by hand-offs and teams in this request (each Orchestrator serves one runRoot). */
   private agentRuns = 0;
   private jevService?: JevService;
+  private vectorStore?: SqliteVectorStore;
   /** The JEV knowledge graph, over the same database connection. */
   private get jev() { return this.jevService ??= new JevService(this.db.connection); }
+  private get vectors() { return this.vectorStore ??= new SqliteVectorStore(this.db.connection); }
 
   constructor(
     private db: AgentDatabase,
@@ -117,6 +121,7 @@ export class Orchestrator {
     const newImageNames = options.attachedImageNames || [];
     const imageNote = newImageNames.length ? `\n[${newImageNames.length} image${newImageNames.length === 1 ? "" : "s"} attached: ${newImageNames.join(", ")}]` : "";
     this.db.addConversationMessage(randomUUID(), conversationId, null, "user", (options.displayPrompt || instruction) + imageNote);
+    this.autoCompactConversation(conversationId, rootTaskId, rootAgentId);
     const available = this.db.listAgents();
     // An assignment after a discussion wraps the client's words in the whole discussion; size and intent come from
     // the client's own request, unless it only points back at the agreed discussion ("carry out what we agreed").
@@ -440,8 +445,10 @@ export class Orchestrator {
     const enrichmentThreshold = this.runtimeConfig.contextEnrichmentConfidence ?? .65;
     const memoryMode = decisionMode(localDecision.needsMemory.confidence, this.runtimeConfig.automaticExecutionConfidence ?? .9, enrichmentThreshold);
     const graphMode = decisionMode(localDecision.needsGraph.confidence, this.runtimeConfig.automaticExecutionConfidence ?? .9, enrichmentThreshold);
+    const vectorMode = decisionMode(localDecision.needsVector.confidence, this.runtimeConfig.automaticExecutionConfidence ?? .9, enrichmentThreshold);
     const explicitContextLookup = /\b(?:related|history|histories|historical|previous|prior|earlier|similar|remember|memory|memories|last time|before)\b/i.test(instruction);
-    const retrieveMemory = explicitContextLookup || (localDecision.source !== "none" && (localDecision.needsMemory.value === true || memoryMode === "reason"));
+    const retrieveVector = Boolean(this.runtimeConfig.vectorEnabled) && (explicitContextLookup || (localDecision.source !== "none" && (localDecision.needsVector.value === true || vectorMode === "reason")));
+    const retrieveMemory = explicitContextLookup || retrieveVector || (localDecision.source !== "none" && (localDecision.needsMemory.value === true || memoryMode === "reason"));
     const retrieveGraph = explicitContextLookup || (localDecision.source !== "none" && (localDecision.needsGraph.value === true || graphMode === "reason"));
     const entitySeeds = retrieveGraph ? knowledge.entities.map(entity => entity.name) : [];
     const graphFacts = retrieveGraph ? knowledge.facts.map(fact => fact.text) : [];
@@ -449,10 +456,29 @@ export class Orchestrator {
     const relatedHistory = retrieveGraph || retrieveMemory
       ? this.db.relatedConversationHistory(agentId, ctx.conversationId, instruction, [...entitySeeds, ...graphFacts], 4)
       : [];
-    const memoryQuery = [instruction, ...entitySeeds, ...graphFacts].join(" ");
+    const graphTerms = [...entitySeeds, ...(retrieveGraph ? knowledge.facts.flatMap(fact => [fact.source, fact.target]) : [])];
+    const vectorScores = new Map<string, number>();
+    let vectorUsed = false;
+    if (retrieveMemory && retrieveVector) {
+      try {
+        const candidates = this.db.memoryCandidates(agentId, 32);
+        const embeddingModel = await this.model.embeddingModelName(ctx.providerId);
+        if (embeddingModel && candidates.length) {
+          const missing = candidates.filter(item => !this.vectors.get(item.id, embeddingModel));
+          const embedded = await this.model.embed([instruction, ...missing.map(item => item.content.slice(0, 3_000))], ctx.providerId);
+          if (embedded) {
+            for (let i = 0; i < missing.length; i++) this.vectors.put(missing[i].id, embedded.model, embedded.vectors[i + 1]);
+            for (const [id, score] of this.vectors.search(embedded.vectors[0], embedded.model, candidates.map(item => item.id), 12)) vectorScores.set(id, score);
+            vectorUsed = vectorScores.size > 0;
+          }
+        }
+      } catch (error) {
+        this.db.trace(ctx.conversationId, ctx.taskId, agentId, "retrieval", { vectorError: error instanceof Error ? error.message : String(error), fallback: "lexical+graph" });
+      }
+    }
     const memories = retrieveMemory
       ? [...new Set([
-          ...this.db.recentMemories(agentId, 8, memoryQuery),
+          ...this.db.recentMemories(agentId, 8, instruction, retrieveGraph ? graphTerms : [], vectorScores),
           ...this.db.memoriesFromConversations(agentId, relatedHistory.map(item => item.conversationId), 6)
         ])].slice(0, 12)
       : [];
@@ -460,8 +486,14 @@ export class Orchestrator {
     const recentContext = ctx.conversationId ? this.db.recentMessages(ctx.conversationId, this.contextRecentMessages()) : [];
     const relatedContext = relatedHistory.map(item => item.context);
     const context = this.fitContext([...relatedContext, ...recentContext], memories, entities);
-    this.db.trace(ctx.conversationId, ctx.taskId, agentId, "decision", { ...localDecision, gates: { memoryMode, graphMode, enrichmentThreshold } });
-    this.db.trace(ctx.conversationId, ctx.taskId, agentId, "retrieval", { memoryCount: context.memories.length, graphFactCount: context.entities.length, recentContextItems: recentContext.length, relatedConversationCount: relatedHistory.length, vectorEnabled: false, explicitContextLookup });
+    const contextChars = context.messages.join("\n").length + context.memories.join("\n").length + context.entities.join("\n").length;
+    this.db.trace(ctx.conversationId, ctx.taskId, agentId, "context", {
+      maxTokens: this.runtimeConfig.contextMaxTokens ?? 12_000,
+      estimatedTokens: Math.ceil(contextChars / 3),
+      sections: { recentConversation: context.messages.length, memories: context.memories.length, graphFacts: context.entities.length }
+    });
+    this.db.trace(ctx.conversationId, ctx.taskId, agentId, "decision", { ...localDecision, gates: { memoryMode, graphMode, vectorMode, enrichmentThreshold } });
+    this.db.trace(ctx.conversationId, ctx.taskId, agentId, "retrieval", { memoryCount: context.memories.length, graphFactCount: context.entities.length, recentContextItems: recentContext.length, relatedConversationCount: relatedHistory.length, vectorEnabled: Boolean(this.runtimeConfig.vectorEnabled), vectorRequested: retrieveVector, vectorUsed, vectorCandidateCount: vectorScores.size, explicitContextLookup });
     const userContent: AgentMessage["content"] = ctx.images?.length
       ? [
           { type: "text", text: instruction },
@@ -552,7 +584,7 @@ export class Orchestrator {
           if (!ctx.planMode) this.db.remember(agentId, "private", `Completed task: ${instruction}\nResult: ${finalResult.slice(0, 1800)}`, "episodic", ctx.conversationId);
           // Conversation history stores the final result once; intermediate assistant content stays in task messages.
           if (ctx.conversationId && ctx.depth === 0) this.db.addConversationMessage(randomUUID(), ctx.conversationId, agentId, "result", finalResult);
-          if (ctx.conversationId && ctx.depth === 0) this.db.compressConversation(ctx.conversationId, Math.max(8, this.contextRecentMessages() * 2));
+          if (ctx.conversationId && ctx.depth === 0) this.autoCompactConversation(ctx.conversationId, ctx.rootTaskId, agentId);
           this.db.trace(ctx.conversationId, ctx.taskId, agentId, "memory", { stored: true, resultLength: finalResult.length });
           this.emit("result", agentId, finalResult);
           return finalResult;
@@ -602,8 +634,13 @@ export class Orchestrator {
           const callKey = `${call.function.name}:${call.function.arguments || ""}`;
           const earlierFailure = failedCalls.get(callKey);
           const wasOffered = availableTools.some(tool => tool.function.name === call.function.name);
+          const selfDirectedHandoff = HANDOFF_TOOLS.includes(call.function.name) && this.isSelfDirectedHandoff(call.function.name, toolArgs, agent);
           let result: string;
-          if (!wasOffered) {
+          if (selfDirectedHandoff) {
+            // Models can return stale calls even when the schema excludes the current agent. Keep
+            // the tool protocol valid, but don't present the ignored call as a failed activity step.
+            result = JSON.stringify({ note: "Ignored a hand-off to yourself. Choose one of the other listed agents, or continue with the information already gathered." });
+          } else if (!wasOffered) {
             this.emit("tool", agentId, `Rejected unavailable ${call.function.name}`, { phase: "start", toolCallId: call.id, toolName: call.function.name, path: toolPath });
             result = JSON.stringify({ error: `${call.function.name} was not offered for this turn or has been disabled after repeated failures. Do not call it again; continue with the available tools or answer with what you have.` });
           } else if (repeatedToolResultPage) {
@@ -650,7 +687,7 @@ export class Orchestrator {
             decisionTools = decisionTools.filter(tool => !HANDOFF_TOOLS.includes(tool.function.name));
             result = JSON.stringify({ error: `${toolError} Delegation is now turned off for you on this task: answer with what you have.` });
           }
-          this.emit("tool", agentId, result, { phase: toolFailed ? "error" : "complete", toolCallId: call.id, toolName: call.function.name, path: toolPath });
+          if (!selfDirectedHandoff) this.emit("tool", agentId, result, { phase: toolFailed ? "error" : "complete", toolCallId: call.id, toolName: call.function.name, path: toolPath });
           const toolRunId = this.db.recordToolRun(ctx.conversationId, ctx.taskId, agentId, external?.name ?? call.function.name, toolArgs, result, toolFailed ? "failed" : "completed");
           if (readKey && !earlierRead && !toolFailed) earlierReads.set(readKey, toolRunId);
           this.db.trace(ctx.conversationId, ctx.taskId, agentId, "tool", { name: call.function.name, toolRunId, durationMs: Date.now() - toolStartedAt, resultChars: result.length, resultPreview: result.slice(0, 500) });
@@ -832,6 +869,24 @@ export class Orchestrator {
     return { error: `${tool} needs "agent_id" (one of: ${reachable}) and "${textKey}". ${problem}` };
   }
 
+  /** Detect a stale model call that targets the active agent, including aliases and team entries. */
+  private isSelfDirectedHandoff(tool: string, args: Record<string, unknown>, caller: AgentDefinition): boolean {
+    const agents = this.db.listAgents();
+    const resolve = (value: unknown) => {
+      if (typeof value !== "string") return undefined;
+      const wanted = value.trim().replace(/^@/, "").toLowerCase();
+      return agents.find(agent => agent.id.toLowerCase() === wanted || agent.name.toLowerCase() === wanted)?.id;
+    };
+    const targets = tool === "delegate_team"
+      ? ([args.tasks, args.team, args.parts, args.agents].find(Array.isArray) as unknown[] | undefined ?? []).flatMap(entry => {
+          if (!entry || typeof entry !== "object") return [];
+          const part = entry as Record<string, unknown>;
+          return [part.agent_id, part.agentId, part.agent, part.target, part.to, part.assignee, part.task_id].map(resolve).filter((id): id is string => Boolean(id));
+        })
+      : [args.agent_id, args.agentId, args.agent, args.target, args.to, args.assignee, args.task_id].map(resolve).filter((id): id is string => Boolean(id));
+    return targets.includes(caller.id);
+  }
+
   /** delegate_team's parts, accepting the same misnamed fields as a single hand-off and ignoring unknown "after" ids. */
   private teamArguments(caller: AgentDefinition, args: Record<string, unknown>, ctx: RunContext): TeamPlan | { error: string } {
     const raw = [args.tasks, args.team, args.parts, args.agents].find(Array.isArray) as unknown[] | undefined;
@@ -927,6 +982,18 @@ export class Orchestrator {
 
   private contextRecentMessages(): number {
     return this.runtimeConfig.contextRecentMessages;
+  }
+
+  private contextCompactionChars(): number {
+    return Math.max(4_000, Math.floor((this.runtimeConfig.contextMaxTokens ?? 12_000) * 3 * .65));
+  }
+
+  private autoCompactConversation(conversationId: string, taskId: string, agentId: string): boolean {
+    const keepRecent = Math.max(8, this.contextRecentMessages() * 2);
+    const maxActiveChars = this.contextCompactionChars();
+    const compacted = this.db.compressConversation(conversationId, keepRecent, maxActiveChars);
+    if (compacted) this.db.trace(conversationId, taskId, agentId, "context", { event: "auto_compacted", keepRecent, maxActiveChars });
+    return compacted;
   }
 
   private toolsAllowedFor(agent: AgentDefinition, ctx: RunContext) {

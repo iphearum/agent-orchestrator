@@ -102,6 +102,7 @@ export async function activate(context: vscode.ExtensionContext) {
       maxDelegationsPerTask: settings.get<number>("maxDelegationsPerTask", 8),
       contextRecentMessages: settings.get<number>("contextRecentMessages", 6),
       contextMaxTokens: settings.get<number>("contextMaxTokens", 12000),
+      vectorEnabled: settings.get<boolean>("vectorEnabled", false),
       automaticExecutionConfidence: settings.get<number>("automaticExecutionConfidence", .9),
       contextEnrichmentConfidence: settings.get<number>("contextEnrichmentConfidence", .65),
       maxAgentRunsPerRequest: settings.get<number>("maxAgentRunsPerRequest", 12)

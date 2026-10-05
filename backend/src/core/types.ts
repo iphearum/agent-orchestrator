@@ -111,4 +111,4 @@ export interface AgentDecision {
   fallbackReason?: string;
 }
 
-export type TraceKind = "decision" | "routing" | "retrieval" | "model" | "tool" | "memory" | "jev" | "error";
+export type TraceKind = "decision" | "routing" | "retrieval" | "context" | "model" | "tool" | "memory" | "jev" | "error";

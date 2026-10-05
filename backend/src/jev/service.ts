@@ -35,7 +35,17 @@ const shown = (row: { name: string; data_json?: string | null }, data?: string |
   const name = parseData(data ?? row.data_json ?? null).displayName;
   return typeof name === "string" && name ? name : row.name;
 };
-const queryTerms = (text: string) => [...new Set(text.toLowerCase().match(/[\p{L}\p{N}_./-]{3,}/gu) ?? [])].slice(0, 12);
+const QUERY_STOP_WORDS = new Set([
+  "about", "after", "again", "against", "also", "and", "any", "are", "because", "been", "before", "being",
+  "between", "both", "but", "can", "could", "did", "does", "doing", "down", "during", "each", "few",
+  "for", "from", "further", "had", "has", "have", "having", "here", "how", "into", "just", "more",
+  "most", "other", "our", "out", "over", "own", "same", "should", "some", "such", "than", "that",
+  "the", "their", "them", "then", "there", "these", "they", "this", "those", "through", "under",
+  "until", "very", "was", "were", "what", "when", "where", "which", "while", "who", "why", "with",
+  "would", "your"
+]);
+const queryTerms = (text: string) => [...new Set((text.toLowerCase().match(/[\p{L}\p{N}_./-]{3,}/gu) ?? [])
+  .filter(term => !QUERY_STOP_WORDS.has(term)))].slice(0, 12);
 
 /**
  * The JEV knowledge graph (spec §18–19): resolve entities, record facts with cardinality-aware conflict handling,
@@ -119,8 +129,21 @@ export class JevService {
     const limit = Math.max(1, Math.min(40, options.limit ?? 12));
     const terms = queryTerms(options.query);
     const named = this.repo.entitiesMatching(terms, 24)
-      .map(row => ({ row, score: terms.filter(term => row.name.includes(term) || (row.data_json ?? "").toLowerCase().includes(term)).length }))
-      .sort((a, b) => b.score - a.score).slice(0, 12).map(item => item.row);
+      .map(row => {
+        const name = row.name.toLowerCase();
+        const data = (row.data_json ?? "").toLowerCase();
+        const score = terms.reduce((total, term) => {
+          // Prefer an entity's own name over a coincidental mention in its metadata or aliases.
+          if (name === term) return total + 3;
+          if (name.split(/[^\p{L}\p{N}_]+/u).includes(term)) return total + 2;
+          if (name.includes(term)) return total + 1;
+          return data.includes(term) ? total + .5 : total;
+        }, 0);
+        return { row, score };
+      })
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score || b.row.created_at.localeCompare(a.row.created_at))
+      .slice(0, 12).map(item => item.row);
     const sessionTasks = [...(options.taskIds ?? []), ...(options.conversationId ? this.repo.conversationTaskIds(options.conversationId, 10) : [])];
     const linked = this.repo.entitiesById(this.repo.taskEntityIds([...new Set(sessionTasks)], 12));
     const seeds = new Map<string, EntityRow>();

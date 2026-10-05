@@ -73,6 +73,21 @@ Run `relief.ts <bot>` (add `head` for a close-up). These show there, often befor
 | Bot looks tiny in the welcome canvas | Very wide pose; `botFit` backs the camera off to fit the width | Expected for spread poses (ally). Trim the outliers (e.g. the raised hand) only if the user wants it bigger |
 | Avatar shows body bits under the head | `portrait()` collapses non-head bones at the neck; blended neck vertices remain | Fine at avatar size; if large, lower the neck blend (narrower `band`) |
 
+## Source model and skeleton
+
+Some problems are cheaper to fix in the model than in the bake. Regenerating costs Meshy credits, so ask first (references/meshy.md).
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Streaks, bridges or hand paint on the thighs come back after every `classify` fix | The hands are sculpted resting on the body, so the remesher welded and painted them together | Regenerate with `pose_mode: "a-pose"` (and `smart-topology` for separate parts) instead of piling up `scrub` / `strictSeams` rules |
+| Bot idles with its arms straight out | Sculpted in a T-pose; poses are offsets from the sculpt, and skinning can't fold the arm ~80° down cleanly | Re-pose the arms in Blender, or regenerate in A-pose. `skeleton.ts` prints each arm's angle below horizontal |
+| Dark blotches or highlights that don't move with the runtime's lights; `lum` rules misfire | Lighting baked into the base colour | Regenerate or `retexture` with `remove_lighting: true` |
+| Shell looks flat and matte | No metallic-roughness or normal map in the source | `enable_pbr: true` when generating or retexturing |
+| `skeleton.ts`: node positions differ from the bind pose | The file was saved in an animation frame, or the mesh was moved off its armature | Re-export at rest (Blender: clear the pose, apply). The draft rig (bind pose) is still right, but `--rigged` would read the posed nodes |
+| `skeleton.ts` maps a joint to the wrong part, or a part owns no vertices | Unusual bone names (non-English, numbered chains) | Rename the bones in Blender to Mixamo-style names or to the runtime's (`arm-1`, …), or extend `role()` in `skeleton.ts` |
+| A `--rigged` bot tears at the hips when the body leans | The source's Hips bone covers the pelvis and the tops of the thighs; `upper` now carries all of it | Use the draft rig with the normal bake (its hip blend and `strictSeams`), or repaint the thigh tops in Blender |
+| Meshy `rig` refuses the model | Over 300k faces, or not a humanoid | `remesh` first (`target_polycount` ≈ 70k); otherwise skip the auto-rig and measure on the grids |
+
 ## Tooling
 
 | Symptom | Cause | Fix |

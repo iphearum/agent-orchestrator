@@ -36,24 +36,31 @@ for (const [i, n] of meshNodes as Array<[number, any]>) {
 if (meshNodes.length !== 1 || json.meshes[(meshNodes[0] as any)?.[1].mesh]?.primitives.length !== 1)
   warn.push("the bake reads only the first mesh node's first primitive; merge meshes/primitives first (gltf-transform join) or extend the decoder");
 
-// Node chain of the mesh node: the bake supports translation + scale only.
+// World transform of the mesh node, including matrix nodes and rotations.
 const parents = new Map<number, number>();
 json.nodes.forEach((n: any, i: number) => (n.children ?? []).forEach((c: number) => parents.set(c, i)));
 const first = (meshNodes[0] as any)?.[0];
 for (let i: number | undefined = first; i !== undefined; i = parents.get(i)) {
   const n = json.nodes[i];
   console.log(`  chain node ${i} ${JSON.stringify(n.name ?? "")}: t=${JSON.stringify(n.translation ?? null)} r=${JSON.stringify(n.rotation ?? null)} s=${JSON.stringify(n.scale ?? null)}${n.matrix ? " matrix" : ""}`);
-  if ((n.rotation && n.rotation.slice(0, 3).some((v: number) => Math.abs(v) > 1e-6)) || n.matrix) warn.push(`node ${i} has a rotation/matrix; nodeTransform() in the bake handles translation + scale only`);
 }
 
-// Size once baked: transform the POSITION accessor bounds through the chain (translation + scale).
+const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+const localMatrix = (n: any): number[] => {
+  if (n.matrix) return n.matrix;
+  const [x, y, z, w] = n.rotation ?? [0, 0, 0, 1], [sx, sy, sz] = n.scale ?? [1, 1, 1], [tx, ty, tz] = n.translation ?? [0, 0, 0];
+  return [(1 - 2 * (y * y + z * z)) * sx, 2 * (x * y + z * w) * sx, 2 * (x * z - y * w) * sx, 0,
+    2 * (x * y - z * w) * sy, (1 - 2 * (x * x + z * z)) * sy, 2 * (y * z + x * w) * sy, 0,
+    2 * (x * z + y * w) * sz, 2 * (y * z - x * w) * sz, (1 - 2 * (x * x + y * y)) * sz, 0, tx, ty, tz, 1];
+};
+const mul = (a: number[], b: number[]) => Array.from({ length: 16 }, (_, k) => { const c = Math.floor(k / 4), r = k % 4; return [0, 1, 2, 3].reduce((sum, i) => sum + a[i * 4 + r] * b[c * 4 + i], 0); });
+const world = (i: number): number[] => { const p = parents.get(i); return p === undefined ? localMatrix(json.nodes[i]) : mul(world(p), localMatrix(json.nodes[i])); };
+// Size once baked: transform all eight corners of the POSITION accessor bounds through the node chain.
 const pos = json.accessors[json.meshes[(meshNodes[0] as any)[1].mesh].primitives[0].attributes.POSITION];
 if (pos.min && pos.max) {
-  let min = [...pos.min], max = [...pos.max];
-  for (let i: number | undefined = first; i !== undefined; i = parents.get(i)) {
-    const n = json.nodes[i], s = n.scale ?? [1, 1, 1], t = n.translation ?? [0, 0, 0];
-    min = min.map((v, c) => v * s[c] + t[c]); max = max.map((v, c) => v * s[c] + t[c]);
-  }
+  const m = first === undefined ? identity : world(first), corners = Array.from({ length: 8 }, (_, k) => [0, 1, 2].map(c => (k >> c) & 1 ? pos.max[c] : pos.min[c]));
+  const points = corners.map(([x, y, z]) => [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]]);
+  const min = [0, 1, 2].map(c => Math.min(...points.map(p => p[c]))), max = [0, 1, 2].map(c => Math.max(...points.map(p => p[c])));
   const size = max.map((v, c) => v - min[c]);
   const k = 8.7 / size[1];
   console.log(`  model size ${size.map(v => v.toFixed(3)).join(" × ")} → baked ${size.map(v => (v * k).toFixed(2)).join(" × ")} units (W × H × D; the procedural robot is ≈ 4 wide)`);
@@ -66,7 +73,7 @@ for (const [i, m] of (json.materials ?? []).entries()) {
   const used = Object.entries(slots).filter(([, v]) => v).map(([k, v]: any) => `${k}${v.extensions?.KHR_texture_transform ? "(tt)" : ""}`);
   console.log(`  material ${i} ${JSON.stringify(m.name ?? "")}: ${used.join(", ") || "no textures"}; baseColorFactor ${JSON.stringify(pbr.baseColorFactor ?? null)} emissive ${JSON.stringify(m.emissiveFactor ?? null)} doubleSided ${!!m.doubleSided} alpha ${m.alphaMode ?? "OPAQUE"}`);
   if (slots.occlusion) warn.push("occlusion texture is ignored by the bake");
-  if (!pbr.baseColorTexture) warn.push(`material ${i} has no base colour texture; the bake's hand/paint heuristics (luminance) assume one`);
+  if (!pbr.baseColorTexture) warn.push(`material ${i} has no base colour texture; the bake's hand/paint heuristics (luminance) assume one. Paint it by region (\`paint\`, as Ironman) or texture it first (Meshy retexture / uv-unwrap, references/meshy.md)`);
 }
 if ((json.materials ?? []).length > 1) warn.push("more than one material; the bake uses the first primitive's material only");
 
@@ -95,8 +102,9 @@ for (const [i, im] of (json.images ?? []).entries()) {
   const b = bin.subarray(bv.byteOffset ?? 0, (bv.byteOffset ?? 0) + bv.byteLength);
   console.log(`  image ${i}: ${dims(b)} ${(b.length / 1e6).toFixed(2)} MB`);
 }
-for (const s of json.skins ?? []) console.log(`  skin ${JSON.stringify(s.name ?? "")}: ${s.joints.length} joints (ignored: the bake rigs the mesh to the robot runtime's own joints)`);
+for (const s of json.skins ?? []) console.log(`  skin ${JSON.stringify(s.name ?? "")}: ${s.joints.length} joints → bun .codex/skills/glb-bot/scripts/skeleton.ts ${file} prints its pivots as a draft rig (--rigged=<bot> bakes its weights)`);
 for (const a of json.animations ?? []) console.log(`  animation ${JSON.stringify(a.name ?? "")}: ${a.channels.length} channels (ignored)`);
 
 console.log(`  total ${triangles} triangles${triangles > 120000 ? ` → set triangles: ~60000–80000 in the bot's CONFIG (decimation)` : ""}`);
+if (triangles > 300000) warn.push(`${triangles} triangles is over Meshy's 300k-face auto-rig limit; remesh first if it is going to meshy_rig (references/meshy.md)`);
 for (const w of warn) console.log(`  ! ${w}`);

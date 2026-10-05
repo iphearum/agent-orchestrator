@@ -617,7 +617,7 @@ export class ChatWindowProvider implements vscode.WebviewViewProvider, vscode.Di
           { label: "Ally", description: "Detailed sci-fi robot", value: "ally" },
           { label: "Vally", description: "Pearl-white robot with a rounded visor", value: "vally" },
           { label: "Meshy", description: "Blue-and-white articulated robot", value: "meshy" },
-          { label: "Buddy", description: "Teal-accented humanoid robot", value: "buddy" }
+          { label: "Buddy", description: "Teal-accented humanoid robot", value: "buddy" },
         ];
         const selected = await vscode.window.showQuickPick(choices, {
           title: "Choose chat robot",

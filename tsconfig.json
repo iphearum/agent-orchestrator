@@ -11,5 +11,5 @@
     "sourceMap": true
   },
   "include": ["backend/src/**/*.ts"],
-  "exclude": ["backend/src/**/*.test.ts"]
+  "exclude": ["backend/src/**/*.test.ts", "backend/src/migrations/**"]
 }

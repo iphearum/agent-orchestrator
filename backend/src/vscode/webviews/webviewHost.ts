@@ -18,7 +18,7 @@ export function webviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions 
 /** The 3D robot model the webviews should show (agentOrchestrator.robotModel), validated for use in HTML. */
 export function robotModelSetting(): string {
   const model = vscode.workspace.getConfiguration("agentOrchestrator").get<string>("robotModel", "default");
-  return ["default", "jocy", "ally", "vally", "meshy", "buddy", "jarvis"].includes(model) ? model : "default";
+  return ["default", "jocy", "ally", "vally", "meshy", "buddy"].includes(model) ? model : "default";
 }
 
 const ROBOT_ASSET_FILES = [
@@ -27,7 +27,6 @@ const ROBOT_ASSET_FILES = [
   "meshy.bin", "meshy-color.webp", "meshy-mr.webp", "meshy-normal.webp",
   "vally.bin",
   "buddy.bin", "buddy-color.webp", "buddy-emissive.webp", "buddy-mr.webp", "buddy-normal.webp",
-  "jarvis.bin", "jarvis-color.webp", "jarvis-emissive.webp", "jarvis-mr.webp", "jarvis-normal.webp"
 ];
 
 /** Use explicit VS Code webview URIs for every baked bot asset; relative URLs can lose the webview's resource mapping. */

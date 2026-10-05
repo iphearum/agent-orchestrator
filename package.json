@@ -1,5 +1,6 @@
 {
   "name": "agent-orchestrator",
+  "pricing": "Free",
   "displayName": "Agent Orchestrator",
   "description": "Multi-agent orchestration for VS Code with SQLite memory and dynamic delegation.",
   "version": "0.1.0",
@@ -306,6 +307,10 @@
               "model": {
                 "type": "string",
                 "description": "Default model for this provider."
+              },
+              "embeddingModel": {
+                "type": "string",
+                "description": "Optional OpenAI-compatible embeddings model used for semantic memory retrieval."
               }
             }
           }
@@ -445,6 +450,11 @@
           "maximum": 100000,
           "description": "Approximate maximum context budget for recent messages, retrieved memories and graph facts."
         },
+        "agentOrchestrator.vectorEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use the active OpenAI-compatible provider's embeddingModel for semantic memory retrieval. Lexical and knowledge-graph retrieval work when disabled."
+        },
         "agentOrchestrator.approvalMode": {
           "type": "string",
           "enum": ["ask", "approve", "full"],
@@ -453,8 +463,8 @@
         },
         "agentOrchestrator.robotModel": {
           "type": "string",
-          "enum": ["default", "jocy", "ally", "vally", "meshy", "buddy", "jarvis"],
-          "enumDescriptions": ["The procedural pearl-white robot.", "Jocy: a small white-and-navy toy robot.", "Ally: a detailed sci-fi robot caught mid-leap.", "Vally: a pearl-white waving robot with a large rounded visor.", "Meshy: a blue-and-white articulated robot.", "Buddy: a teal-accented humanoid robot.", "Jarvis: a chibi crimson-and-silver armoured hero with glowing eye slits."],
+          "enum": ["default", "jocy", "ally", "vally", "meshy", "buddy"],
+          "enumDescriptions": ["The procedural pearl-white robot.", "Jocy: a small white-and-navy toy robot.", "Ally: a detailed sci-fi robot caught mid-leap.", "Vally: a pearl-white waving robot with a large rounded visor.", "Meshy: a blue-and-white articulated robot.", "Buddy: a teal-accented humanoid robot."],
           "default": "default",
           "description": "3D robot used by the chat welcome hero and the agent avatars. Every model plays the same animations. Open chat windows update as soon as this setting changes."
         },

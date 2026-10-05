@@ -19,7 +19,8 @@ jocy (upright toy, 10k triangles) and ally (mid-leap, 754k → 70k triangles) ar
 | Runtime: loader, rig, skinning, face patch, antenna glow, per-model studios | `robot-runtime.ts`: `BotName`, `BOT_NAMES`, `BOT_FACES`, `loadBotAsset`, `buildBot`, `createBotScene`, `mountBot` |
 | Model choice | `agentOrchestrator.robotModel` (`package.json`) → `robotModelSetting()` (`backend/src/vscode/webviews/webviewHost.ts`) → `data-robot-model` on the runtime script tag (chat window + React webviews) |
 | Window type | `webview-ui/src/env.d.ts` → `RobotModelName` |
-| Tools (run from the repo root) | `.codex/skills/glb-bot/scripts/`: `glb-info.ts`, `grid.ts`, `probe.ts` (incl. `--stretch`), `relief.ts` |
+| Tools (run from the repo root) | `.codex/skills/glb-bot/scripts/`: `glb-info.ts`, `skeleton.ts`, `project-fit.ts` (camera for `paint.project`: paint an untextured bot from its reference art), `grid.ts`, `probe.ts` (incl. `--stretch`), `relief.ts` |
+| Generating or fixing the source model (Meshy MCP: generate, remesh, retexture, auto-rig) | [references/meshy.md](references/meshy.md) |
 | Blender round trip | `scripts/export-rigged.ts <bot>` → `.ui-check/glb-bot/<bot>-rigged.glb`; an edited copy saved as `backend/src/bots/<bot>-rigged.glb` is baked instead of `<bot>.glb` |
 
 Conventions (axes, sides, bone order, `.bin` layout, runtime details) are in [references/pipeline.md](references/pipeline.md). Read it before writing a `classify` or changing the runtime side. When a render looks wrong, look the symptom up in [references/troubleshooting.md](references/troubleshooting.md) before guessing.
@@ -31,7 +32,8 @@ Conventions (axes, sides, bone order, `.bin` layout, runtime details) are in [re
    - **Several meshes or primitives:** the bake reads one. Merge them first.
    - **Node rotations or matrices:** the bake handles translation and scale only.
    - **Over ~120k triangles:** set `triangles`.
-   - An existing skin or animation is ignored. The bot is re-rigged to the runtime's joints because the runtime's poses are what must play.
+   - **A skin** (Meshy auto-rig, Mixamo, a Blender armature): `bun .codex/skills/glb-bot/scripts/skeleton.ts <file>.glb [--yaw=…]` maps the joints onto the runtime's parts and prints a draft `rig` in baked units plus the sculpted arm angle (a T-pose idles with its arms out); `--rigged=<bot>` bakes the skin's own weights instead of `classify` (references/meshy.md §4). Animations are ignored.
+   - **No model yet, or cheaper to regenerate than to fix:** generate it with Meshy using references/meshy.md: A-pose (not T-pose), a blank visor, ~70k triangles, de-lit PBR. Confirm credits with the user first.
 2. **Measure** on orthographic grids normalised exactly like the bake (8.7 units tall, floor at 0, centred, X mirrored like Babylon's loader):
    ```bash
    bun .codex/skills/glb-bot/scripts/grid.ts backend/src/bots/<bot>.glb    # → .ui-check/glb-bot/grid-<bot>-{front-side,back-side}.png

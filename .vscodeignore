@@ -1,5 +1,6 @@
 ﻿.vscode/**
 backend/src/**
+dist/migrations/**
 tsconfig.json
 **/*.map
 node_modules/@types/**
@@ -14,6 +15,7 @@ laya_agent_implementation_spec_v2.md
 webview-ui/**
 .codex/**
 .claude/**
+AGENTS.md
 test-workspace/**
 vscode-extension-samples/**
 agent-core/**
@@ -23,3 +25,4 @@ scripts/**
 .gitignore
 package-lock.json
 *.vsix
+docs/**

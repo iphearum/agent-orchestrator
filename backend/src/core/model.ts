@@ -8,6 +8,8 @@ export interface ModelProvider {
   apiKey?: string;
   models: string[];
   model: string;
+  /** Optional OpenAI-compatible embedding model for semantic memory retrieval. */
+  embeddingModel?: string;
 }
 
 export interface ModelConfig {
@@ -41,6 +43,46 @@ class RunawayThinkingError extends Error {}
 
 export class OpenAICompatibleModel {
   constructor(private readonly config: () => ModelConfig | Promise<ModelConfig> = () => ({ baseUrl: "http://localhost:11434/v1", apiKey: "local", model: "qwen3:8b" })) {}
+
+  async embeddingModelName(selection?: string | AgentModelSelection): Promise<string | undefined> {
+    const cfg = await this.config();
+    const selected = typeof selection === "string" ? { model: selection } : selection;
+    const provider = cfg.providers?.find(item => item.id === selected?.providerId)
+      || cfg.providers?.find(item => item.id === cfg.activeProviderId)
+      || cfg.providers?.[0];
+    return provider && provider.protocol !== "anthropic" ? provider.embeddingModel?.trim() || undefined : undefined;
+  }
+
+  /** Embeddings are optional and only available for OpenAI-compatible providers with an explicit model configured. */
+  async embed(texts: string[], selection?: string | AgentModelSelection): Promise<{ model: string; vectors: number[][] } | undefined> {
+    if (!texts.length) return undefined;
+    const cfg = await this.config();
+    const selected = typeof selection === "string" ? { model: selection } : selection;
+    const provider = cfg.providers?.find(item => item.id === selected?.providerId)
+      || cfg.providers?.find(item => item.id === cfg.activeProviderId)
+      || cfg.providers?.[0];
+    const embeddingModel = provider?.embeddingModel?.trim();
+    if (!provider || provider.protocol === "anthropic" || !embeddingModel) return undefined;
+    const baseUrl = (provider.baseUrl || cfg.baseUrl).replace(/\/$/, "");
+    const response = await fetch(`${baseUrl}/embeddings`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(provider.apiKey ? { authorization: `Bearer ${provider.apiKey}` } : {}) },
+      body: JSON.stringify({ model: embeddingModel, input: texts })
+    });
+    if (!response.ok) throw new Error(`Embedding HTTP ${response.status}: ${await response.text()}`);
+    const payload = await response.json() as { data?: Array<{ index?: number; embedding?: unknown }> };
+    if (!Array.isArray(payload.data) || payload.data.length !== texts.length) throw new Error("Embedding provider returned an unexpected number of vectors.");
+    const vectors = new Array<number[]>(texts.length);
+    for (const item of payload.data) {
+      const index = Number.isInteger(item.index) ? item.index! : payload.data.indexOf(item);
+      if (index < 0 || index >= texts.length || !Array.isArray(item.embedding) || !item.embedding.length || !item.embedding.every(value => typeof value === "number" && Number.isFinite(value))) {
+        throw new Error("Embedding provider returned an invalid vector.");
+      }
+      vectors[index] = item.embedding as number[];
+    }
+    if (vectors.some(vector => !Array.isArray(vector))) throw new Error("Embedding provider omitted one or more vectors.");
+    return { model: embeddingModel, vectors };
+  }
 
   async chat(
     messages: AgentMessage[],

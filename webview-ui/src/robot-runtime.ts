@@ -33,9 +33,9 @@ import "@babylonjs/core/Meshes/Builders/capsuleBuilder";
 type RobotState = "idle" | "listening" | "thinking" | "working" | "talking" | "happy" | "error";
 type RobotModel = "default" | "wanted" | BotName;
 /** Meshy GLB bots, baked by scripts/bake-bots.ts into media/bots/ and skinned to the procedural robot's rig. */
-type BotName = "jocy" | "ally" | "vally" | "meshy" | "buddy" | "jarvis";
+type BotName = "jocy" | "ally" | "vally" | "meshy" | "buddy";
 const MeshoptDecoder = meshoptDecoder as typeof MeshoptDecoderType;
-const BOT_NAMES: BotName[] = ["jocy", "ally", "vally", "meshy", "buddy", "jarvis"];
+const BOT_NAMES: BotName[] = ["jocy", "ally", "vally", "meshy", "buddy"];
 /** A horizontal strip of square frames, played with CSS `steps()`; `frames: 1` is a still. */
 type AvatarSheet = { url: string; frames: number; duration: number };
 
@@ -51,7 +51,15 @@ declare global {
 
 /** "head-front" is a preview-only view that matches target/3d-robot-head.png (straight-on head close-up). */
 type Framing = "avatar" | "hero" | "head-front";
-type Arm = { arm: TransformNode; forearm: TransformNode; side: number; fingers: Array<{ node: TransformNode; sign: number }> };
+/**
+ * `hand` (GLB bots) pivots at the wrist: it flexes with `grip` and follows through on a wave. `digits` are a GLB
+ * bot's finger bones (bake `handTransplant`): each turns `rest − gain × grip` rad (within FINGER_RANGE) about `axis`,
+ * toward the palm.
+ */
+type Arm = {
+  arm: TransformNode; forearm: TransformNode; hand?: TransformNode; side: number; fingers: Array<{ node: TransformNode; sign: number }>;
+  digits?: Array<{ node: TransformNode; rest: number; gain: number; axis: Vector3 }>;
+};
 /** `thigh` pivots at the hip, `shin` at the knee, `foot` at the ankle. */
 type Leg = { thigh: TransformNode; shin: TransformNode; foot: TransformNode; side: number };
 type Robot = {
@@ -257,12 +265,16 @@ type FaceRig = {
   /** Personality: re-wire presets for this bot, e.g. { happy: "love" } shows heart eyes wherever "happy" plays. */
   wire?: Partial<Record<Expression, Expression>>;
   /**
-   * A faceplate rather than a screen (Jarvis): no glass and no mouth. The painted mask stays visible, dark sockets
-   * cover the painted eyes, and only the live eyes glow on them.
+   * A faceplate rather than a screen: no glass and no mouth. The painted mask stays visible, dark sockets cover the
+   * painted eyes, and only the live eyes glow on them.
    */
   mask?: boolean;
-  /** The visor's facing yaw when its mean normal misleads (Jarvis's sculpted faceplate averages out to ~0). */
+  /** Painted features to paint over on a mask (ellipses: centre and radii as screen fractions), in the plate's colour. */
+  cover?: { ink: string; at: Array<{ c: [number, number]; r: [number, number] }> };
+  /** The visor's facing yaw when its mean normal misleads. */
   faceYaw?: number;
+  /** Avatar camera polar angle (rad, Babylon beta; default from the visor's tilt) for a sculpt whose head is pitched. */
+  avatarBeta?: number;
 };
 /** Measured from target/3d-robot-head.png (the procedural robot). */
 const DEFAULT_FACE_RIG: FaceRig = { eyes: { left: [0.252, 0.466], right: [0.748, 0.466], size: 0.118, style: "oval" }, mouth: { at: [0.5, 0.8], scale: 1 }, palette: { eyes: FACE_COLOR } };
@@ -370,14 +382,23 @@ function drawEyes(ctx: CanvasRenderingContext2D, w: number, h: number, face: Fac
     }
     if ((eyes === "open" || eyes === "wide") && rig.eyes.style === "slit") {
       // Iron-Man slit: a pointed outer tip, a straight top edge sloping down toward the nose (the stern brow), a
-      // blunt inner end and a curved lower edge back to the tip. "wide" opens it taller.
+      // blunt inner end and a curved lower edge back to the tip. A cyan rim surrounds the white lens, like the
+      // illuminated slit in the reference. "wide" opens it taller.
       const k = size * (eyes === "wide" ? 1.15 : 1), o = outward, open = eyes === "wide" ? 1.35 : 1;
-      const at = (u: number, v: number): [number, number] => [x + u * k * squash * sx, y + v * k * lid * open * sy];
-      ctx.moveTo(...at(o * 1.4, -0.3));
-      ctx.lineTo(...at(-o * 1.0, 0.0));
-      ctx.lineTo(...at(-o * 1.05, 0.32));
-      ctx.quadraticCurveTo(...at(o * 0.55, 0.52), ...at(o * 1.4, -0.3));
-      ctx.closePath();
+      const slit = (inset: number) => {
+        const p = (u: number, v: number): [number, number] => [x + u * k * inset * squash * sx, y + v * k * inset * lid * open * sy];
+        ctx.beginPath();
+        ctx.moveTo(...p(o * 1.25, -0.25));
+        ctx.lineTo(...p(-o * 0.95, 0.0));
+        ctx.lineTo(...p(-o * 0.95, 0.6));
+        ctx.quadraticCurveTo(...p(o * 0.45, 0.78), ...p(o * 1.25, -0.25));
+        ctx.closePath();
+      };
+      slit(1);
+      ctx.fillStyle = "#27DDF4";
+      ctx.fill();
+      slit(0.76);
+      ctx.fillStyle = colors.ink;
       ctx.fill();
       continue;
     }
@@ -1537,7 +1558,7 @@ function applyPose(robot: Robot, current: Pose, target: Pose, k: number, springs
   robot.upper.position.y = current.bob;
   const att = robot.attitude;
   robot.head.rotation.set(att.pitch + current.headPitch * att.motion, att.yaw + current.headYaw * att.motion, att.roll + current.headRoll * att.motion);
-  robot.arms.forEach(({ arm, forearm, side, fingers }, i) => {
+  robot.arms.forEach(({ arm, forearm, hand, side, fingers, digits }, i) => {
     const c = current.arms[i];
     const g = target.arms[i];
     const motionScale = robot.armMotionScale ?? 1;
@@ -1550,6 +1571,10 @@ function applyPose(robot: Robot, current: Pose, target: Pose, k: number, springs
     forearm.rotation.set(c.bend, 0, c.wave);
     // Opening swings each finger's tip outward about its palm hinge.
     for (const { node, sign } of fingers) node.rotation.z = sign * c.grip;
+    // A closing grip curls the hand forward at the wrist, an opening one tips it back; a wave flicks it further.
+    if (hand) hand.rotation.set(0.9 * c.grip, 0, 0.45 * c.wave);
+    // Closing curls every knuckle into a fist, opening spreads the fingers flat (a touch past straight).
+    for (const d of digits ?? []) d.node.rotationQuaternion = Quaternion.RotationAxis(d.axis, Math.min(FINGER_RANGE.closed, Math.max(FINGER_RANGE.open, d.rest - d.gain * c.grip)));
   });
   robot.antenna.emissiveColor = ANTENNA_GLOW[target.face.tone].scale(current.antenna * 0.9);
   robot.antenna.albedoColor = target.face.tone === "blue" && robot.antennaBlueBall ? robot.antennaBlueBall : ANTENNA_BALL[target.face.tone];
@@ -1688,13 +1713,14 @@ function createStage(engine: Engine, framing: Framing, fit?: BotFit) {
 }
 
 /** Put a built robot on the stage: contact shadow, framing yaw, avatar portrait attitude and the first pose. */
-function stageRobot(scene: Scene, robot: Robot, framing: Framing, fit?: BotFit) {
+function stageRobot(scene: Scene, robot: Robot, framing: Framing, fit?: BotFit, botName?: BotName) {
   const avatar = framing === "avatar";
   const headFront = framing === "head-front";
   if (framing === "hero") robot.shadow = contactShadow(scene, robot.root);
   // The reference is a gentle three-quarter view: face turned toward the viewer's left.
   // Avatars nearly face the camera so the expression reads at 24 px.
-  robot.baseYaw = headFront ? 0 : avatar ? 0 : BASE.yaw;
+  // Keep flying bots' face panels readable while hovering; the shared three-quarter angle hides a curved visor.
+  robot.baseYaw = headFront || avatar ? 0 : robot.locomotion === "fly" ? 0 : BASE.yaw;
   robot.root.rotation.y = robot.baseYaw;
   if (avatar) {
     // Portrait: a slight 3/4 for depth, half-strength head motion so droops and tilts never hide the face,
@@ -1932,7 +1958,10 @@ function playOver(pose: Pose, play: Play, u: number, mode: Locomotion = "walk", 
     case "turn-around": { // wind-up, then a full spin in place, stepping round, arms a little out
       // Anticipation: crouch and twist the other way for the first ~15%, then spin.
       const windup = u < 0.15 ? smooth(u / 0.15) : 1 - smooth((u - 0.15) / 0.1);
-      pose.turn += -0.3 * windup + 2 * Math.PI * smooth((u - 0.12) / 0.78);
+      // A full spin turns Vally's sculpted visor edge-on for most of the act. Keep fliers' turn-around playful without
+      // yawing the visor away; grounded bots can still do the full spin.
+      if (mode === "fly") pose.sway += 0.08 * Math.sin(2 * Math.PI * u);
+      else pose.turn += -0.3 * windup + 2 * Math.PI * smooth((u - 0.12) / 0.78);
       pose.bob -= 0.08 * windup;
       for (const leg of pose.legs) leg.knee += 0.25 * windup;
       gait(u * 3, 0.16, 0.7, u > 0.2 ? env : 0);
@@ -2118,11 +2147,16 @@ type BotHeader = {
   rig: {
     hip: V3; neck: V3; antenna: V3; antennaBall: { at: V3; radius: number };
     shoulder: [V3, V3]; elbow: [V3, V3]; wrist: [V3, V3]; hipJoint: [V3, V3]; knee: [V3, V3]; ankle: [V3, V3];
+    /** Finger bones (bake `handTransplant`): knuckle pivot, curl axis toward the palm, tip; [side −1, side +1]. */
+    fingers?: Array<{ name: BotFinger; pivot: [V3, V3]; curl: [V3, V3]; tip: [V3, V3] }>;
   };
   /** Visor rectangle on the head's front, in baked units. */
   face: { centre: [number, number]; width: number; height: number; squircle: number; inset: number; outline?: number[]; rim?: number[] };
   textures: Partial<Record<"color" | "mr" | "normal" | "emissive", string>>;
   emissive: number[] | null;
+  /** Painted from lit, tone-mapped art (bake `paint.project`): drawn without tone mapping at this exposure. */
+  art?: { exposure: number };
+
 };
 type BotAsset = {
   header: BotHeader; base: string;
@@ -2136,7 +2170,7 @@ type BotFit = {
   heroX?: number;
   /** Portrait aim point off the body's centre line (Ally's head sits to the side) and the visor's facing yaw. */
   avatarX?: number; avatarZ?: number; faceYaw?: number;
-  /** Portrait camera elevation (ArcRotate beta): lower for a visor that faces down (Jarvis's tucked chin). */
+  /** Portrait camera elevation (ArcRotate beta): lower for a visor that faces down. */
   avatarBeta?: number;
 };
 
@@ -2173,21 +2207,23 @@ const BOT_FACES: Record<BotName, FaceRig> = {
     palette: { eyes: { blue: { ink: "#68F4E8", glow: ["rgba(0, 205, 190, 1)", "rgba(40, 225, 210, 1)", "rgba(125, 250, 235, 1)"] }, red: FACE_COLOR.red } },
     wire: { happy: "joy" },
   },
-  jarvis: {
-    // Iron-Man faceplate: slit eyes on the painted cyan slits (vertex colour samples: 19% / 81% across, mid-height),
-    // no mouth; arc-reactor cyan.
-    // Reference: white-hot slits in a cyan-blue halo.
-    eyes: { left: [0.21, 0.43], right: [0.78, 0.45], size: 0.3, style: "slit" }, mouth: { at: [0.5, 0.8], scale: 1 }, glow: 0.8,
-    palette: { eyes: { blue: { ink: "#F4FFFF", glow: ["rgba(30, 150, 255, 1)", "rgba(80, 200, 255, 1)", "rgba(185, 240, 255, 1)"] }, red: FACE_COLOR.red } },
-    mask: true,
-    // Measured from the two painted eye slits (the helmet looks toward the pointing hand).
-    faceYaw: 0.44,
-  },
+  
 };
 
 /** How a bot gets around: on its legs, hovering (Vally has none), or both (Ally walks, takes off and lands). */
 type Locomotion = "walk" | "fly" | "both";
-const BOT_LOCOMOTION: Record<BotName, Locomotion> = { jocy: "walk", ally: "both", vally: "fly", meshy: "walk", buddy: "walk", jarvis: "both" };
+type BotFinger = "index" | "middle" | "ring" | "thumb";
+/**
+ * How far each finger bone curls at rest and per unit of closing `grip` (rad). The fingers stay spread as sculpted:
+ * a closing grip only flexes them slightly (FINGER_RANGE) and an opening one stretches them a little further open.
+ */
+const FINGER_CURL: Record<BotFinger, { rest: number; gain: number }> = {
+  index: { rest: 0, gain: 0.8 }, middle: { rest: 0, gain: 0.8 }, ring: { rest: 0, gain: 0.8 }, thumb: { rest: 0, gain: 0.6 },
+};
+/** Curl limits (rad): never folded in, at most a little bent back. */
+const FINGER_RANGE = { open: -0.2, closed: 0.15 };
+
+const BOT_LOCOMOTION: Record<BotName, Locomotion> = { jocy: "walk", ally: "both", vally: "fly", meshy: "walk", buddy: "walk" };
 
 /** media/bots/ next to the extension; resolved from this script's own URL (dist/webview/robot-runtime.js). */
 const BOTS_BASE = (() => {
@@ -2281,10 +2317,10 @@ const FLY_ROOM: Record<Locomotion, FlightRoom> = { walk: { side: 0, up: 0 }, fly
  * `probe.ts <bot> --fit`.
  */
 function heroFrame({ header, positions, joints }: BotAsset, mode: Locomotion): { radius: number; x: number; y: number } {
-  // Jarvis's arm points out level, so turns and banked flights swing its whole length past the 85% turn allowance.
-  const MARGIN = header.name === "jarvis" ? 0.75 : 0.35;
+  const MARGIN = 0.35;
   const rig = header.rig;
-  const armBones = ["arm-1", "forearm-1", "arm+1", "forearm+1"].map(b => header.bones.indexOf(b));
+  // Per side: the arm's bones (fingers included); the first half of the list is side −1.
+  const armBones = ["-1", "+1"].flatMap(s => ["arm", "forearm", "hand", "index", "middle", "ring", "thumb"].map(b => header.bones.indexOf(b + s)));
   // Per side (index 0 = −X, viewer's right; 1 = +X, viewer's left): how far the body and the arm reach.
   const body = [0, 0], arm = [0, 0];
   let reach = 0, top = 0;
@@ -2295,8 +2331,8 @@ function heroFrame({ header, positions, joints }: BotAsset, mode: Locomotion): {
     body[x < 0 ? 0 : 1] = Math.max(body[x < 0 ? 0 : 1], Math.abs(x));
     const k = armBones.indexOf(joints[4 * i]);
     if (k >= 0) {
-      const sh = rig.shoulder[k < 2 ? 0 : 1];
-      arm[k < 2 ? 0 : 1] = Math.max(arm[k < 2 ? 0 : 1], Math.hypot(x - sh[0], y - sh[1], z - sh[2]));
+      const side = k < armBones.length / 2 ? 0 : 1, sh = rig.shoulder[side];
+      arm[side] = Math.max(arm[side], Math.hypot(x - sh[0], y - sh[1], z - sh[2]));
     }
   }
   // Sideways, a stretch swings the hands out at full length (95% still touched the edge); upward about 75%.
@@ -2350,7 +2386,7 @@ function botFit({ header, positions, normals, joints }: BotAsset): BotFit {
     avatarX: (x0 + x1) / 2,
     avatarZ: (z0 + z1) / 2,
     faceYaw,
-    avatarBeta: 1.47 + Math.max(0, facePitch - 0.15),
+    avatarBeta: BOT_FACES[header.name as BotName]?.avatarBeta ?? 1.47 + Math.max(0, facePitch - 0.15),
   };
 }
 
@@ -2474,7 +2510,14 @@ function buildBotFace(scene: Scene, asset: BotAsset, rig: FaceRig, parent: Trans
       a.stroke();
       a.restore();
     } else if (rig.mask) {
-      // Dark sockets over the painted eye slits, so a blink or a happy squint closes onto the faceplate.
+      // Paint over the low painted slits (they read as a glowing mouth), then dark sockets under the live eyes so a
+      // blink or a happy squint closes onto the faceplate.
+      if (rig.cover) {
+        a.filter = `blur(${Math.round(H * 0.012)}px)`;
+        a.fillStyle = rig.cover.ink;
+        for (const { c: [cu, cv], r: [ru, rv] } of rig.cover.at) { a.beginPath(); a.ellipse(cu * W, cv * H, ru * W, rv * H, 0, 0, Math.PI * 2); a.fill(); }
+        a.filter = "none";
+      }
       drawEyes(a, W, H, { ...NEUTRAL_FACE, scale: 1.1 }, false, rig, { ink: "#101317", glow: FACE_COLOR.blue.glow }, 1);
     } else {
       a.filter = `blur(${Math.round(H * 0.02)}px)`;
@@ -2569,17 +2612,26 @@ function buildBot(scene: Scene, asset: BotAsset): Robot {
   const antennaStem = node("antenna", headBody, rig.antenna);
   const arms: Arm[] = [];
   const legs: Leg[] = [];
+  const fingerBones: Record<string, TransformNode> = {};
   for (const [i, side] of [[0, -1], [1, 1]] as const) {
     const arm = node(`arm${side}`, upper, rig.shoulder[i]);
-    arms.push({ arm, forearm: node(`forearm${side}`, arm, rig.elbow[i]), side, fingers: [] });
+    const forearm = node(`forearm${side}`, arm, rig.elbow[i]);
+    const hand = node(`hand${side}`, forearm, rig.wrist[i]);
+    const digits = (rig.fingers ?? []).map(f => {
+      const n = node(`${f.name}${side}`, hand, f.pivot[i]);
+      fingerBones[`${f.name}${side > 0 ? "+1" : "-1"}`] = n;
+      return { node: n, ...FINGER_CURL[f.name], axis: v(f.curl[i]) };
+    });
+    arms.push({ arm, forearm, hand, side, fingers: [], digits });
     const thigh = node(`thigh${side}`, root, rig.hipJoint[i]);
     const shin = node(`shin${side}`, thigh, rig.knee[i]);
     legs.push({ thigh, shin, foot: node(`foot${side}`, shin, rig.ankle[i]), side });
   }
   const bones: Record<string, TransformNode> = {
     root, upper, head: headBody, antenna: antennaStem,
-    "arm-1": arms[0].arm, "forearm-1": arms[0].forearm, "arm+1": arms[1].arm, "forearm+1": arms[1].forearm,
+    "arm-1": arms[0].arm, "forearm-1": arms[0].forearm, "hand-1": arms[0].hand!, "arm+1": arms[1].arm, "forearm+1": arms[1].forearm, "hand+1": arms[1].hand!,
     "thigh-1": legs[0].thigh, "shin-1": legs[0].shin, "foot-1": legs[0].foot, "thigh+1": legs[1].thigh, "shin+1": legs[1].shin, "foot+1": legs[1].foot,
+    ...fingerBones,
   };
 
   const mesh = new Mesh(`bot-${header.name}-body`, scene);
@@ -2621,6 +2673,13 @@ function buildBot(scene: Scene, asset: BotAsset): Robot {
   if (glow) { mat.emissiveTexture = glow; mat.emissiveColor = Color3.White(); }
   mat.backFaceCulling = false;
   mat.ambientColor = new Color3(0.25, 0.25, 0.25);
+  if (header.art) {
+    // The texture is the art's own final colours: ACES on top crushes its reds (green → 0) into crimson.
+    const look = new ImageProcessingConfiguration();
+    look.toneMappingEnabled = false;
+    look.exposure = header.art.exposure;
+    mat.imageProcessingConfiguration = look;
+  }
   mesh.material = mat;
   // A smooth bezel along the visor rim's lip (traced by the bake), in the shell's material: it gives the glass a clean
   // edge line and hides the decimated lip's jagged silhouette.
@@ -2637,10 +2696,12 @@ function buildBot(scene: Scene, asset: BotAsset): Robot {
   }
 
   const skeleton = new Skeleton(`bot-${header.name}-skeleton`, `bot-${header.name}`, scene);
-  const links = header.bones.map(name => ({ bone: new Bone(name, skeleton, null, Matrix.Identity()), node: bones[name], keep: name === "head" || name === "antenna" }));
+  // A finger the bake didn't find has no node: its bone follows the hand.
+  const nodeFor = (name: string) => bones[name] ?? bones[name.replace(/^(index|middle|ring|thumb)/, "hand")] ?? root;
+  const links = header.bones.map(name => ({ bone: new Bone(name, skeleton, null, Matrix.Identity()), node: nodeFor(name), keep: name === "head" || name === "antenna" }));
   mesh.skeleton = skeleton;
   // Nodes in parent-first order, so each world matrix is computed from an up-to-date parent.
-  const order = [root, upper, neck, headBody, antennaStem, ...arms.flatMap(a => [a.arm, a.forearm]), ...legs.flatMap(l => [l.thigh, l.shin, l.foot])];
+  const order = [root, upper, neck, headBody, antennaStem, ...arms.flatMap(a => [a.arm, a.forearm, a.hand!, ...(a.digits ?? []).map(d => d.node)]), ...legs.flatMap(l => [l.thigh, l.shin, l.foot])];
   const rootInverse = new Matrix();
   const relative = new Matrix();
   const collapsed = Matrix.Scaling(0, 0, 0).multiply(Matrix.Translation(rig.neck[0], rig.neck[1], rig.neck[2]));
@@ -2659,7 +2720,7 @@ function buildBot(scene: Scene, asset: BotAsset): Robot {
   // Antenna ball: a glow cap over the painted ball carries the state glow and turns red on error.
   const antenna = plastic(scene, `${header.name}-antenna-ball`, "#2F7BEA", 0.28);
   const antennaBlueBall = header.name === "vally" ? Color3.FromHexString("#E5EDF9").toLinearSpace() : undefined;
-  // A bot without an antenna (Jarvis) bakes a zero radius: no cap.
+  // A bot without an antenna bakes a zero radius: no cap.
   if (rig.antennaBall.radius > 0) {
     const ball = place(MeshBuilder.CreateSphere(`${header.name}-antenna-glow`, { diameter: rig.antennaBall.radius * 2.16, segments: 20 }, scene), antennaStem, antenna, v(rig.antennaBall.at));
     ball.isPickable = false;
@@ -2675,16 +2736,11 @@ function buildBot(scene: Scene, asset: BotAsset): Robot {
   const coil = new Mesh(`${header.name}-coil`, scene);
   coil.parent = root;
   return {
-    // Jarvis's sculpted helmet is pitched down; lift it slightly so the painted eye slits and live face read from chat.
-    root, baseYaw: 0, attitude: {
-      pitch: header.name === "jarvis" ? -0.22 : 0,
-      // Counter Jarvis's sculpted look toward its pointing hand, keeping both eye slits visible from the chat camera.
-      yaw: header.name === "jarvis" ? -0.3 : 0.08, roll: 0, motion: 1,
-    }, upper, head: neck, arms, legs, antenna,
+    root, baseYaw: 0, attitude: { pitch: 0, yaw: 0.08, roll: 0, motion: 1 }, upper, head: neck, arms, legs, antenna,
     antennaStem, antennaBlueBall, headBody, coil, coilLength: 1, headRest: 0, setFace,
-    // Vally's +X arm is sculpted mid-wave and Jarvis's points out level; Buddy's hard-shell shoulders need gentler swings.
-    raiseMax: header.name === "vally" ? [1.2, 0.35] : header.name === "jarvis" ? [1.2, 0.3] : undefined,
-    armMotionScale: header.name === "vally" ? 0.6 : header.name === "buddy" ? 0.82 : header.name === "jarvis" ? 0.7 : undefined,
+    // Vally's +X arm is sculpted mid-wave; Buddy's hard-shell shoulders need gentler swings.
+    raiseMax: header.name === "vally" ? [1.2, 0.35] : undefined,
+    armMotionScale: header.name === "vally" ? 0.6 : header.name === "buddy" ? 0.82 : undefined,
     faceWire: faceRig.wire,
     locomotion: BOT_LOCOMOTION[header.name as BotName] ?? "walk",
     portrait: () => { portrait = true; },
@@ -2700,7 +2756,7 @@ async function createBotScene(engine: Engine, framing: Framing, name: BotName) {
   fit.heroY = frame.y;
   const { scene, camera } = createStage(engine, framing, fit);
   const robot = buildBot(scene, asset);
-  stageRobot(scene, robot, framing, fit);
+  stageRobot(scene, robot, framing, fit, name);
   if (framing === "hero") robot.room = heroRoom(asset, camera);
   return { scene, camera, robot };
 }
@@ -2711,8 +2767,7 @@ async function createBotScene(engine: Engine, framing: Framing, name: BotName) {
  * reach, plus a little for turning and banking) or its top (antenna included) is a margin inside the frame.
  */
 function heroRoom({ header, positions }: BotAsset, camera: ArcRotateCamera): FlightRoom {
-  // Jarvis banks and faces its travel with one arm pointing out level: keep its sideways flight tighter.
-  const ASPECT = HERO_ASPECT, MARGIN = header.name === "jarvis" ? 1.1 : 0.45;
+  const ASPECT = HERO_ASPECT, MARGIN = 0.45;
   let reach = 0, top = 0;
   for (let i = 0; i < positions.length / 3; i++) {
     // Turning swings depth into width: use the bot's radius around its vertical axis.
