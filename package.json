@@ -1,15 +1,22 @@
 {
-  "name": "agent-orchestrator",
+  "name": "agent-orchestration-studio",
   "pricing": "Free",
-  "displayName": "Agent Orchestrator",
-  "description": "Multi-agent orchestration for VS Code with SQLite memory and dynamic delegation.",
-  "version": "0.1.0",
-  "publisher": "local",
+  "displayName": "Agent Orchestration Studio",
+  "description": "Coordinate AI agents in VS Code with model providers, tool approvals, task delegation, and persistent memory.",
+  "icon": "media/agents-icon.png",
+  "version": "0.1.2",
+  "publisher": "nphearum",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iphearum/agent-orchestrator.git"
+  },
   "engines": {
     "vscode": "^1.104.0"
   },
   "extensionKind": ["workspace"],
   "categories": ["Other", "AI", "Chat", "Programming Languages", "Machine Learning"],
+  "keywords": ["AI", "agents", "multi-agent", "orchestration", "LLM", "MCP", "memory", "delegation", "Laya"],
   "activationEvents": [
     "onCommand:agentOrchestrator.open",
     "onCommand:agentOrchestrator.openAgentChat",
@@ -76,65 +83,72 @@
     "commands": [
       {
         "command": "agentOrchestrator.open",
-        "title": "Agent Orchestrator: Open"
+        "title": "Agent Orchestration Studio: Open",
+        "icon": "$(comment-discussion)"
       },
       {
         "command": "agentOrchestrator.openAgentChat",
-        "title": "Agent Orchestrator: Open Agentic",
+        "title": "Agent Orchestration Studio: Open Agentic",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "agentOrchestrator.runTask",
-        "title": "Agent Orchestrator: Run Task",
+        "title": "Agent Orchestration Studio: Run Task",
         "icon": "$(add)"
       },
       {
         "command": "agentOrchestrator.manageAgents",
-        "title": "Agent Orchestrator: Manage Agents",
+        "title": "Agent Orchestration Studio: Manage Agents",
         "icon": "$(organization)"
       },
       {
         "command": "agentOrchestrator.configureProviderKey",
-        "title": "Agent Orchestrator: Configure Provider API Key"
+        "title": "Agent Orchestration Studio: Configure Provider API Key",
+        "icon": "$(key)"
       },
       {
         "command": "agentOrchestrator.configureN8nToken",
-        "title": "Agent Orchestrator: Configure n8n Token"
+        "title": "Agent Orchestration Studio: Configure n8n Token",
+        "icon": "$(key)"
       },
       {
         "command": "agentOrchestrator.configureSocketToken",
-        "title": "Agent Orchestrator: Configure Socket Token"
+        "title": "Agent Orchestration Studio: Configure Socket Token",
+        "icon": "$(plug)"
       },
       {
         "command": "agentOrchestrator.configureLayaKey",
-        "title": "Agent Orchestrator: Configure Laya API Key"
+        "title": "Agent Orchestration Studio: Configure Laya API Key",
+        "icon": "$(key)"
       },
       {
         "command": "agentOrchestrator.resumeLaya",
-        "title": "Agent Orchestrator: Resume Laya"
+        "title": "Agent Orchestration Studio: Resume Laya",
+        "icon": "$(sync)"
       },
       {
         "command": "agentOrchestrator.testLaya",
-        "title": "Agent Orchestrator: Test Laya Connection"
+        "title": "Agent Orchestration Studio: Test Laya Connection",
+        "icon": "$(plug)"
       },
       {
         "command": "agentOrchestrator.openSettings",
-        "title": "Agent Orchestrator: Open Settings",
+        "title": "Agent Orchestration Studio: Open Settings",
         "icon": "$(gear)"
       },
       {
         "command": "agentOrchestrator.openMonitor",
-        "title": "Agent Orchestrator: Open Overview",
+        "title": "Agent Orchestration Studio: Open Overview",
         "icon": "$(dashboard)"
       },
       {
         "command": "agentOrchestrator.showExternalTools",
-        "title": "Agent Orchestrator: Show External Tools (MCP)",
+        "title": "Agent Orchestration Studio: Show External Tools (MCP)",
         "icon": "$(tools)"
       },
       {
         "command": "agentOrchestrator.openLatestTask",
-        "title": "Agent Orchestrator: Open Latest Task",
+        "title": "Agent Orchestration Studio: Open Latest Task",
         "icon": "$(tasklist)"
       }
     ],
@@ -142,7 +156,7 @@
       {
         "id": "agentOrchestrator.chat",
         "name": "orchestrator",
-        "fullName": "Agent Orchestrator",
+        "fullName": "Agent Orchestration Studio",
         "description": "Coordinate specialized agents to solve a task.",
         "isSticky": true
       }
@@ -181,7 +195,7 @@
       ]
     },
     "configuration": {
-      "title": "Agent Orchestrator",
+      "title": "Agent Orchestration Studio",
       "properties": {
         "agentOrchestrator.externalTools.enabled": {
           "type": "boolean",
@@ -194,7 +208,7 @@
             "type": "string"
           },
           "default": ["mcp_*"],
-          "markdownDescription": "Which registered tools count as agent tools (`*` is a wildcard). The default takes MCP server tools only. Run **Agent Orchestrator: Show External Tools** to see real tool names."
+          "markdownDescription": "Which registered tools count as agent tools (`*` is a wildcard). The default takes MCP server tools only. Run **Agent Orchestration Studio: Show External Tools** to see real tool names."
         },
         "agentOrchestrator.externalTools.agentTools": {
           "type": "object",
@@ -350,7 +364,7 @@
         "agentOrchestrator.socketLinks": {
           "type": "array",
           "default": [],
-          "description": "Persistent WebSocket agent runtimes. The server must implement the Agent Orchestrator JSON request/response protocol documented in README.md. Tokens are stored separately in VS Code Secret Storage.",
+          "description": "Persistent WebSocket agent runtimes. The server must implement the Agent Orchestration Studio JSON request/response protocol documented in README.md. Tokens are stored separately in VS Code Secret Storage.",
           "items": {
             "type": "object",
             "required": ["id", "name", "url"],
@@ -392,7 +406,7 @@
           "default": 5,
           "minimum": 0,
           "maximum": 120,
-          "markdownDescription": "Laya is paused after 3 slow or failed requests in a row (or at once for a rejected key or bad URL), and decisions then use the fallback. While paused, one small background request is sent every this many minutes; Laya resumes when it answers. `0` = stay paused until you resume it (**Agent Orchestrator: Resume Laya** or click the status bar item)."
+          "markdownDescription": "Laya is paused after 3 slow or failed requests in a row (or at once for a rejected key or bad URL), and decisions then use the fallback. While paused, one small background request is sent every this many minutes; Laya resumes when it answers. `0` = stay paused until you resume it (**Agent Orchestration Studio: Resume Laya** or click the status bar item)."
         },
         "agentOrchestrator.layaModel": {
           "type": "string",

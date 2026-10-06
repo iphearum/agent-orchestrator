@@ -289,7 +289,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand("agentOrchestrator.showExternalTools", () => showExternalTools(externalTools)));
 
   context.subscriptions.push(vscode.commands.registerCommand("agentOrchestrator.openSettings", async () => {
-    await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:local.agent-orchestrator");
+    await vscode.commands.executeCommand("workbench.action.openSettings", "agentOrchestrator");
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand("agentOrchestrator.configureProviderKey", async () => {

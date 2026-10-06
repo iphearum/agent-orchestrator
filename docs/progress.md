@@ -1,5 +1,47 @@
 # Progress
 
+2026-10-05 19:56 +07 [marketplace-images] Diagnosed broken Marketplace screenshots: packaged README links target GitHub `HEAD`, but screenshot assets and the updated README are still local/untracked and absent from `origin/main`.
+
+2026-10-05 19:28 +07 [rebrand] Renamed the Marketplace extension to Agent Orchestration Studio (`agent-orchestration-studio`), updated docs and command labels, and packaged `nphearum.agent-orchestration-studio@0.1.2` (84 files, 5.73 MB).
+
+2026-10-05 19:15 +07 [release-package] Packaged and inspected `nphearum.agent-orchestrator@0.1.2`; VSIX contains 84 files and is 5.73 MB.
+
+2026-10-05 19:14 +07 [release-version] Bumped the extension manifest from 0.1.1 to 0.1.2 for the next Marketplace update.
+
+2026-10-05 17:15 +07 [full-screen-vsix] Rebuilt package with the combined screenshot; verified 84 files, five screenshot assets, and a 5.73 MB VSIX.
+
+2026-10-05 17:14 +07 [full-screen-sidebar] Added a dark full-width preview showing the sidebar beside Overview; README now labels the combined, sidebar, and overview images distinctly.
+
+2026-10-05 17:05 +07 [full-screen-package] Rebuilt the VSIX after clarifying the full-screen Overview label; four screenshots included (83 files, 5.56 MB).
+
+2026-10-05 17:05 +07 [full-screen-preview] Clarified the README gallery label for the full-width Overview screenshot; sidebar preview remains a separate image.
+
+2026-10-05 16:51 +07 [open-source-package] Added local environment-file ignore rules; VSIX rebuilt with MIT notice, install guide, icon, and four screenshots (83 files, 5.56 MB).
+
+2026-10-05 16:50 +07 [open-source] Added MIT license, manifest SPDX metadata, contributor guide, and README links; holder set to the public repository owner `iphearum`.
+
+2026-10-05 16:49 +07 [sidebar-preview] Added the sidebar preview to the README gallery at the user's request; open-source audit found no root license yet, so license selection is pending.
+
+2026-10-05 16:28 +07 [screenshot-package] Repacked VSIX with three README screenshots; verified links and assets are included. Package is 5.52 MB (81 files).
+
+2026-10-05 16:27 +07 [marketplace-screenshots] Captured and inspected overview, task workflow, sidebar, and chat previews; three representative screenshots added to README with demo-data captions. Browser script errors: none. Windows Computer Use fallback unavailable; captured via approved headless Chrome.
+
+2026-10-05 15:52 +07 [readme-quickstart] Added a compact copy/paste provider settings example and API-key step to README; VSIX repackaged and verified to include it.
+
+2026-10-05 15:46 +07 [install-vsix] VSCE packaging passes after adding repository metadata; verified the VSIX includes INSTALL.md, README.md, and the Marketplace PNG icon (78 files, 5.22 MB).
+
+2026-10-05 15:34 +07 [install-guide] Added INSTALL.md with VSIX installation, provider setup, optional Laya and integration steps. Verified public GitHub remote and added repository metadata so VSCE can resolve the README link.
+
+2026-10-05 15:33 +07 [install-guide] Added standalone VSIX install and first-run provider/setup guide; linked INSTALL.md from README.
+
+2026-10-05 15:33 +07 [icon-package] Rebuilt extension and VSIX after icon updates; compile/package pass. Verified 256×256 PNG is included, README remains included, all 14 contributed commands have icons; package 5.22 MB.
+
+2026-10-05 15:32 +07 [marketplace-icons] Added a 256px PNG Marketplace icon generated from the existing robot mark, set the manifest icon, and added Codicon symbols to commands that lacked them; inspected the rendered icon.
+
+2026-10-05 15:12 +07 [marketplace-package] Rebuilt after README, metadata, and settings-search updates. TypeScript/webview compile and VSIX packaging pass; package is 5.2 MB with README, publisher `nphearum`, and no repository AGENTS.md.
+
+2026-10-05 15:08 +07 [marketplace-readme] Added publishing-focused README and listing keywords; Open Settings now searches the extension's setting prefix instead of the former local publisher ID.
+
 2026-10-05 13:26 +07 [vsix-review] Memory diagram maps to SQLite memories, JEV retrieval and optional vectors; compile and VSIX package pass. Four tests fail (one hand-off status mismatch; three Windows process/cleanup issues); publisher is still `local`, README is deleted, and repository AGENTS.md was excluded from the package.
 
 2026-10-03 23:49 +07 [bots-removed] Removed Jarvis and Ironman from the picker, model settings, runtime roster and packaged assets; old saved selections fall back to Default. Typecheck, webview build and VSIX package pass; package contains neither bot.
